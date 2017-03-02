@@ -276,6 +276,8 @@ class RNNModel(Model):
         return ret
 
     def predict_on_batch(self, sess, inputs1_batch, inputs2_batch):
+        inputs1_batch = np.array(inputs1_batch)
+        inputs2_batch = np.array(inputs2_batch)
         feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch)
         predictions = sess.run(tf.argmax(self.pred, axis=1), feed_dict=feed)
         return predictions
@@ -295,13 +297,13 @@ class RNNModel(Model):
         token_cm = ConfusionMatrix(labels=LBLS)
 
         correct_preds, total_correct, total_preds = 0., 0., 0.
-        for _, _, label, label_  in self.output(sess, examples_raw, examples):
+        for _, _, label, label_  in self.output(sess, examples_raw, examples): #*
             token_cm.update(label, label_)
-            gold = set(label)
-            pred = set(label_)
-            correct_preds += len(gold.intersection(pred))
-            total_preds += len(pred)
-            total_correct += len(gold)
+            gold = label
+            pred = label_
+            correct_preds += 1 if pred==1 and gold==1 else 0
+            total_preds += 1 if pred==1 else 0
+            total_correct += 1 if gold==1 else 0
 
         p = correct_preds / total_preds if correct_preds > 0 else 0
         r = correct_preds / total_correct if correct_preds > 0 else 0
@@ -309,7 +311,7 @@ class RNNModel(Model):
         return token_cm, (p, r, f1)
 
 
-    def output(self, sess, inputs_raw, inputs=None):
+    def output(self, sess, inputs_raw, inputs):
         """
         Reports the output of the model on examples (uses helper to featurize each example).
         """
@@ -317,8 +319,8 @@ class RNNModel(Model):
             inputs = self.preprocess_sequence_data(self.helper.vectorize(inputs_raw))
 
         preds = []
-        prog = Progbar(target=1 + int(len(inputs_raw) / self.config.batch_size))
-        for i, batch in enumerate(minibatches(inputs_raw, self.config.batch_size, shuffle=False)):
+        prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
+        for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
             batch = batch[:2] # ignore label
             preds_ = self.predict_on_batch(sess, *batch)
             preds += list(preds_)
@@ -328,7 +330,7 @@ class RNNModel(Model):
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, labels_batch):
         feed = self.create_feed_dict(inputs1_batch, inputs2_batch, labels_batch=labels_batch,
                                      dropout=Config.dropout)
-        _, loss = sess.run([self.train_op, self.loss], feed_dict=feed)
+        _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
 
     def run_epoch(self, sess, train_examples, dev_examples, train, dev):

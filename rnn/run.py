@@ -62,7 +62,6 @@ def do_train(args):
                 # Save predictions in a text file.
                 output = model.output(session, dev)
                 sentences, labels, predictions = zip(*output)
-                predictions = [[LBLS[l] for l in preds] for preds in predictions]
                 output = zip(sentences, labels, predictions)
 
                 with open(model.config.conll_output, 'w') as f:
