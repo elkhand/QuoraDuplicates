@@ -42,7 +42,7 @@ class Config:
     batch_size = 32
     n_epochs = 10
     max_grad_norm = 10.
-    lr = 0.001
+    lr = 0.01
 
     def __init__(self, args):
         self.cell1 = "gru"
@@ -269,11 +269,12 @@ class RNNModel(Model):
         assert len(examples_raw) == len(examples)
         assert len(examples_raw) == len(preds)
 
+        labels = zip(*examples_raw)[2]
         ret = []
         for i, (sent1, sent2, label) in enumerate(examples_raw):
             label_ = preds[i]
             ret.append([sent1, sent2, label, label_])
-        return ret
+        return labels, preds
 
     def predict_on_batch(self, sess, inputs1_batch, inputs2_batch):
         inputs1_batch = np.array(inputs1_batch)
@@ -294,21 +295,20 @@ class RNNModel(Model):
         Returns:
             The F1 score for predicting tokens as named entities.
         """
-        token_cm = ConfusionMatrix(labels=LBLS)
 
-        correct_preds, total_correct, total_preds = 0., 0., 0.
-        for _, _, label, label_  in self.output(sess, examples_raw, examples): #*
-            token_cm.update(label, label_)
-            gold = label
-            pred = label_
-            correct_preds += 1 if pred==1 and gold==1 else 0
-            total_preds += 1 if pred==1 else 0
-            total_correct += 1 if gold==1 else 0
+        labels, preds = self.output(sess, examples_raw, examples) #*
+        labels, preds = np.array(labels), np.array(preds)
+
+        correct_preds = np.logical_and(labels==1, preds==1).sum()
+        total_preds = float(np.sum(preds==1))
+        total_correct = float(np.sum(labels==1))
+
+        print correct_preds, total_preds, total_correct
 
         p = correct_preds / total_preds if correct_preds > 0 else 0
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        return token_cm, (p, r, f1)
+        return (p, r, f1)
 
 
     def output(self, sess, inputs_raw, inputs):
@@ -348,9 +348,7 @@ class RNNModel(Model):
         #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         logger.info("Evaluating on development data")
-        token_cm, entity_scores = self.evaluate(sess, dev_examples, dev)
-        logger.debug("Token-level confusion matrix:\n" + token_cm.as_table())
-        logger.debug("Token-level scores:\n" + token_cm.summary())
+        entity_scores = self.evaluate(sess, dev_examples, dev)
         logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         f1 = entity_scores[-1]
