@@ -4,7 +4,7 @@ CS224N Final Project: Detecting if 2 questions are duplicates of each other.
 ## How to run the model for Entailment paper
 
 From the project's root directory (assuming you created data directory in <project-root> dir):
-
+```
 python rnn/run.py train \
 -dt1 data/dat_dev_a.conll \
 -dt2 data/dat_dev_b.conll \
@@ -14,7 +14,7 @@ python rnn/run.py train \
 -ddl data/sm_labels_train.conll \
 -v data/glvocab_1_100.txt \
 -vv data/glwordvectors_1_100.txt
-
+```
 
 ## You can download data from this link:
 
