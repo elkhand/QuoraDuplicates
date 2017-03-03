@@ -36,13 +36,13 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 120 # longest sequence to parse
     n_classes = 2
-    dropout = 0.5
+    dropout = 0.9
     embed_size = 100 # todo: make depend on input
     hidden_size = 100
     batch_size = 32
     n_epochs = 10
     max_grad_norm = 10.
-    lr = 0.001
+    lr = 0.005
 
     def __init__(self, args):
         self.cell1 = "gru"
@@ -87,7 +87,7 @@ class RNNModel(Model):
         """
         self.input1_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.input2_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
-        self.labels_placeholder = tf.placeholder(tf.int32, shape=(None,))
+        self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,))
         self.dropout_placeholder = tf.placeholder(tf.float32, [])
 
     def create_feed_dict(self, inputs1_batch, inputs2_batch, labels_batch=None, dropout=1):
@@ -195,8 +195,8 @@ class RNNModel(Model):
 
         # Define U and b2 as variables.
         xavier_init = tf.contrib.layers.xavier_initializer()
-        U = tf.get_variable("U",shape=[self.config.hidden_size, self.config.n_classes], dtype=np.float32, initializer=xavier_init)
-        b_2 = tf.Variable(initial_value=np.zeros((1,self.config.n_classes)), dtype=np.float32)
+        U = tf.get_variable("U",shape=[self.config.hidden_size, 1], dtype=np.float32, initializer=xavier_init)
+        b_2 = tf.Variable(initial_value=np.zeros((1, 1)), dtype=np.float32)
 
         # Initialize state as vector of zeros.
         h = tf.fill(tf.shape(x1[:,0,:]), 0.0)
@@ -220,7 +220,7 @@ class RNNModel(Model):
         preds = tf.matmul(o_drop_t, U) + b_2 #(None, n_classes)
 
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
-        return preds
+        return preds[:,0]
 
     def add_loss_op(self, preds):
         """Adds Ops for the loss function to the computational graph.
@@ -234,7 +234,7 @@ class RNNModel(Model):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(preds, self.labels_placeholder))
+        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=2.0))
         return loss
 
     def add_training_op(self, loss):
@@ -269,17 +269,17 @@ class RNNModel(Model):
         assert len(examples_raw) == len(examples)
         assert len(examples_raw) == len(preds)
 
-        ret = []
-        for i, (sent1, sent2, label) in enumerate(examples_raw):
-            label_ = preds[i]
-            ret.append([sent1, sent2, label, label_])
-        return ret
+        labels = zip(*examples_raw)[2]
+
+        return labels, preds
 
     def predict_on_batch(self, sess, inputs1_batch, inputs2_batch):
         inputs1_batch = np.array(inputs1_batch)
         inputs2_batch = np.array(inputs2_batch)
         feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch)
-        predictions = sess.run(tf.argmax(self.pred, axis=1), feed_dict=feed)
+
+        pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
+        predictions = sess.run(tf.greater(tf.sigmoid(self.pred), pos_thres), feed_dict=feed)
         return predictions
 
     def evaluate(self, sess, examples, examples_raw):
@@ -294,21 +294,20 @@ class RNNModel(Model):
         Returns:
             The F1 score for predicting tokens as named entities.
         """
-        token_cm = ConfusionMatrix(labels=LBLS)
 
-        correct_preds, total_correct, total_preds = 0., 0., 0.
-        for _, _, label, label_  in self.output(sess, examples_raw, examples): #*
-            token_cm.update(label, label_)
-            gold = label
-            pred = label_
-            correct_preds += 1 if pred==1 and gold==1 else 0
-            total_preds += 1 if pred==1 else 0
-            total_correct += 1 if gold==1 else 0
+        labels, preds = self.output(sess, examples_raw, examples) #*
+        labels, preds = np.array(labels), np.array(preds)
+
+        correct_preds = np.logical_and(labels==1, preds==1).sum()
+        total_preds = float(np.sum(preds==1))
+        total_correct = float(np.sum(labels==1))
+
+        print correct_preds, total_preds, total_correct
 
         p = correct_preds / total_preds if correct_preds > 0 else 0
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        return token_cm, (p, r, f1)
+        return (p, r, f1)
 
 
     def output(self, sess, inputs_raw, inputs):
@@ -348,10 +347,8 @@ class RNNModel(Model):
         #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         logger.info("Evaluating on development data")
-        token_cm, entity_scores = self.evaluate(sess, dev_examples, dev)
-        logger.debug("Token-level confusion matrix:\n" + token_cm.as_table())
-        logger.debug("Token-level scores:\n" + token_cm.summary())
-        logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
+        entity_scores = self.evaluate(sess, dev_examples, dev)
+        logger.info("P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         f1 = entity_scores[-1]
         return f1
