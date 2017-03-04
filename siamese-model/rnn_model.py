@@ -10,6 +10,9 @@ import copy
 import tensorflow as tf
 import numpy as np
 
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from q2_rnn_cell import RNNCell
 from q3_gru_cell import GRUCell
 
