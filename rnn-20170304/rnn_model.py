@@ -25,6 +25,7 @@ logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 
+
 class Config:
     """Holds model hyperparams and data information.
 
@@ -38,8 +39,8 @@ class Config:
     n_classes = 2
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
-    hidden_size = 300
-    batch_size = 32
+    hidden_size = 1000
+    batch_size = 100
     n_epochs = 100
     max_grad_norm = 10.
     lr = 0.001
