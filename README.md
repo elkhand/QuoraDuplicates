@@ -4,8 +4,11 @@ CS224N Final Project: Detecting if 2 questions are duplicates of each other.
 ## How to run the model for Entailment paper
 
 From the project's root directory (assuming you created data directory in <project-root> dir):
+
+Running Attention-Entailment model:
+
 ```
-python rnn/run.py train \
+python attention-entailment-model/run.py train \
 -dt1 data/dat_dev_a.conll \
 -dt2 data/dat_dev_b.conll \
 -dtl data/labels_dev.conll \
@@ -15,6 +18,21 @@ python rnn/run.py train \
 -v data/glvocab_1_100.txt \
 -vv data/glwordvectors_1_100.txt
 ```
+
+Running Simaese model:
+
+```
+python attention-entailment-model/run.py train \
+-dt1 data/dat_train_a.conll \
+-dt2 data/dat_train_b.conll \
+-dtl data/labels_train.conll \
+-dd1 data/dat_dev_a.conll \
+-dd2 data/dat_dev_b.conll \
+-ddl data/labels_dev.conll \
+-v data/glvocab_1_100.txt \
+-vv data/glwordvectors_1_100.txt
+```
+
 
 ## You can download data from this link:
 
