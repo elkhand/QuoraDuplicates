@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Q2: Recurrent neural nets for NER
@@ -17,6 +17,8 @@ import copy
 import tensorflow as tf
 import numpy as np
 
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from util import print_sentence, write_conll, read_dat
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper

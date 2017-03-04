@@ -10,6 +10,9 @@ import copy
 import tensorflow as tf
 import numpy as np
 
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from q2_rnn_cell import RNNCell
 from q3_gru_cell import GRUCell
 
@@ -25,6 +28,7 @@ logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 
+
 class Config:
     """Holds model hyperparams and data information.
 
@@ -36,13 +40,13 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 120 # longest sequence to parse
     n_classes = 2
-    dropout = 0.9
+    dropout = 0.95
     embed_size = 100 # todo: make depend on input
-    hidden_size = 100
-    batch_size = 32
-    n_epochs = 10
+    hidden_size = 1000
+    batch_size = 100
+    n_epochs = 100
     max_grad_norm = 10.
-    lr = 0.005
+    lr = 0.001
 
     def __init__(self, args):
         self.cell1 = "gru"
@@ -195,29 +199,29 @@ class RNNModel(Model):
 
         # Define U and b2 as variables.
         xavier_init = tf.contrib.layers.xavier_initializer()
-        U = tf.get_variable("U",shape=[self.config.hidden_size, 1], dtype=np.float32, initializer=xavier_init)
-        b_2 = tf.Variable(initial_value=np.zeros((1, 1)), dtype=np.float32)
+        # U = tf.get_variable("U", dtype=np.float32, initializer=np.identity(self.config.hidden_size, dtype=np.float32))
+        b_2 = tf.Variable(initial_value=np.zeros((1,1)), dtype=np.float32)
 
         # Initialize state as vector of zeros.
-        h = tf.fill(tf.shape(x1[:,0,:]), 0.0)
+        h1 = tf.fill([tf.shape(x1)[0], self.config.hidden_size], 0.0)
+        h2 = tf.fill([tf.shape(x2)[0], self.config.hidden_size], 0.0)
         with tf.variable_scope("RNN1"):
             for time_step in range(self.max_length):
                 x_t = x1[:, time_step, :]
-                o_t, h = cell1(x_t, h)
-                h_step1.append(h)
+                o_t, h1 = cell1(x_t, h1)
+                h_step1.append(h1)
                 tf.get_variable_scope().reuse_variables()
-
-        # use h from output of first lstm as input to 2nd
+            o_drop_t1 = tf.nn.dropout(o_t, keep_prob=dropout_rate)
         with tf.variable_scope("RNN2"):
             for time_step in range(self.max_length):
                 x_t = x2[:, time_step, :]
-                o_t, h = cell2(x_t, h)
-                h_step2.append(h)
+                o_t, h2 = cell2(x_t, h2)
+                h_step2.append(h2)
                 tf.get_variable_scope().reuse_variables()
-            o_drop_t = tf.nn.dropout(o_t, keep_prob=dropout_rate)
+            o_drop_t2 = tf.nn.dropout(o_t, keep_prob=dropout_rate)
 
         # use U and b2 for final prediction
-        preds = tf.matmul(o_drop_t, U) + b_2 #(None, n_classes)
+        preds = tf.reduce_sum(o_drop_t1 * o_drop_t2, 1, keep_dims=True) + b_2 #(None, n_classes)
 
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
         return preds[:,0]
@@ -257,7 +261,14 @@ class RNNModel(Model):
             train_op: The Op for training.
         """
         optimizer = tf.train.AdamOptimizer()
-        train_op = optimizer.minimize(loss)
+        grads_and_vars = optimizer.compute_gradients(loss)
+        grads, grad_vars = zip(*grads_and_vars)
+        grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.config.max_grad_norm)
+
+        self.grad_norm = tf.global_norm(grads)
+
+        train_op = optimizer.apply_gradients(zip(grads, grad_vars))
+
         return train_op
 
     def preprocess_sequence_data(self, examples):
