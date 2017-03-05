@@ -431,25 +431,18 @@ def pad_sequences(data, max_length):
 
     # Use this zero vector when padding sequences.
     zero_vector = [0] * Config.n_features
-    zero_label = 4 # corresponds to the 'O' tag
 
     for sentence1, sentence2, label in data:
         feat_sent1 = zero_vector * max_length
         feat_sent2 = zero_vector * max_length
-        # feat_mask1 = [False] * max_length
-        # feat_mask2 = [False] * max_length
         for i, word in enumerate(sentence1):
-            if i>= max_length:
+            if i >= max_length:
                 break
             feat_sent1[i] = word
-            # feat_lab[i] = label
-            # feat_mask1[i] = True
         for i, word in enumerate(sentence2):
-            if i>= max_length:
+            if i >= max_length:
                 break
             feat_sent2[i] = word
-            # feat_lab[i] = label
-            # feat_mask2[i] = True
         ret.append((feat_sent1, feat_sent2, label))
     return ret
 

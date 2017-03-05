@@ -13,7 +13,7 @@ import numpy as np
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from q2_rnn_cell import RNNCell
+from lstm_cell import LSTMCell
 from q3_gru_cell import GRUCell
 
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
@@ -48,8 +48,8 @@ class Config:
     lr = 0.005
 
     def __init__(self, args):
-        self.cell1 = "gru"
-        self.cell2 = "gru"
+        self.cell1 = "lstm"
+        self.cell2 = "lstm"
 
         if "output_path" in args:
             # Where to save things.
@@ -183,14 +183,14 @@ class RNNModel(Model):
         # Use the cell defined below. For Q2, we will just be using the
         # RNNCell you defined, but for Q3, we will run this code again
         # with a GRU cell!
-        if self.config.cell1 == "rnn":
-            cell1 = RNNCell(Config.n_features * Config.embed_size, Config.hidden_size)
+        if self.config.cell1 == "lstm":
+            cell1 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
         elif self.config.cell1 == "gru":
             cell1 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
-        if self.config.cell2 == "rnn":
-            cell2 = RNNCell(Config.n_features * Config.embed_size, Config.hidden_size)
+        if self.config.cell2 == "lstm":
+            cell2 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
         elif self.config.cell2 == "gru":
             cell2 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
         else:
@@ -198,32 +198,36 @@ class RNNModel(Model):
 
         # Define U and b2 as variables.
         xavier_init = tf.contrib.layers.xavier_initializer()
-        U = tf.get_variable("U",shape=[self.config.hidden_size, 1], dtype=np.float32, initializer=xavier_init)
-        b_2 = tf.Variable(initial_value=np.zeros((1, 1)), dtype=np.float32)
+        U = tf.get_variable("U", shape=(self.config.hidden_size,), dtype=tf.float32, initializer=xavier_init)
+        b = tf.Variable(initial_value=np.zeros((1,)), dtype=tf.float32)
 
         # Initialize state as vector of zeros.
-        h = tf.fill(tf.shape(x1[:,0,:]), 0.0)
-        with tf.variable_scope("RNN1"):
+        h = tf.fill([tf.shape(x1)[0], self.config.hidden_size], 0.0)
+        c = tf.fill([tf.shape(x1)[0], self.config.hidden_size], 0.0)
+
+        with tf.variable_scope("LSTM1"):
             for time_step in range(self.max_length):
                 x_t = x1[:, time_step, :]
-                o_t, h = cell1(x_t, h)
+                _, h, c = cell1(x_t, h, c)
                 h_step1.append(h)
-                tf.get_variable_scope().reuse_variables()
+                if time_step == 0:
+                    tf.get_variable_scope().reuse_variables()
 
         # use h from output of first lstm as input to 2nd
-        with tf.variable_scope("RNN2"):
+        with tf.variable_scope("LSTM2"):
             for time_step in range(self.max_length):
                 x_t = x2[:, time_step, :]
-                o_t, h = cell2(x_t, h)
+                _, h, c = cell2(x_t, h, c)
                 h_step2.append(h)
-                tf.get_variable_scope().reuse_variables()
-            o_drop_t = tf.nn.dropout(o_t, keep_prob=dropout_rate)
+                if time_step == 0:
+                    tf.get_variable_scope().reuse_variables()
+            h_drop = tf.nn.dropout(h, keep_prob=dropout_rate)
 
         # use U and b2 for final prediction
-        preds = tf.matmul(o_drop_t, U) + b_2 #(None, n_classes)
+        preds = tf.reduce_sum(U * h_drop, 1) + b
 
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
-        return preds[:,0]
+        return preds
 
     def add_loss_op(self, preds):
         """Adds Ops for the loss function to the computational graph.
@@ -434,25 +438,18 @@ def pad_sequences(data, max_length):
 
     # Use this zero vector when padding sequences.
     zero_vector = [0] * Config.n_features
-    zero_label = 4 # corresponds to the 'O' tag
 
     for sentence1, sentence2, label in data:
         feat_sent1 = zero_vector * max_length
         feat_sent2 = zero_vector * max_length
-        # feat_mask1 = [False] * max_length
-        # feat_mask2 = [False] * max_length
         for i, word in enumerate(sentence1):
-            if i>= max_length:
+            if i >= max_length:
                 break
             feat_sent1[i] = word
-            # feat_lab[i] = label
-            # feat_mask1[i] = True
         for i, word in enumerate(sentence2):
-            if i>= max_length:
+            if i >= max_length:
                 break
             feat_sent2[i] = word
-            # feat_lab[i] = label
-            # feat_mask2[i] = True
         ret.append((feat_sent1, feat_sent2, label))
     return ret
 

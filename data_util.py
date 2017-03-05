@@ -138,7 +138,7 @@ def load_and_preprocess_data(args):
     dev_dat1   = helper.vectorize(dev_q1)
     dev_dat2   = helper.vectorize(dev_q2)
 
-    return helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab, train_q1, train_q2, dev_q1, dev_q2
+    return helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab
 
 def load_embeddings(args, helper):
     embeddings = np.array(np.random.randn(len(helper.tok2id) + 1, args.embed_size), dtype=np.float32)
