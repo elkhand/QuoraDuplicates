@@ -23,15 +23,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from util import print_sentence, write_conll, read_dat
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
 from defs import LBLS
-from q2_rnn_cell import RNNCell
-from q3_gru_cell import GRUCell
 from rnn_model import RNNModel, Config, logger
 
 
 def do_train(args):
     # Set up some parameters.
     config = Config(args)
-    helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab, train_q1, train_q2, dev_q1, dev_q2 = load_and_preprocess_data(args)
+    helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab = load_and_preprocess_data(args)
     train = zip(train_dat1, train_dat2, train_lab)
     dev = zip(dev_dat1, dev_dat2, dev_lab)
     embeddings = load_embeddings(args, helper)
