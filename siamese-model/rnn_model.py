@@ -46,7 +46,7 @@ class Config:
     batch_size = 100
     n_epochs = 100
     max_grad_norm = 10.
-    lr = 0.001
+    lr = 0.0003
 
     def __init__(self, args):
         self.cell1 = "lstm"
@@ -230,7 +230,7 @@ class RNNModel(Model):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=2.0))
+        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=1.7))
         return loss
 
     def add_training_op(self, loss):
