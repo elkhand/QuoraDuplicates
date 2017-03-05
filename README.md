@@ -22,7 +22,7 @@ python attention-entailment-model/run.py train \
 Running Simaese model:
 
 ```
-python attention-entailment-model/run.py train \
+python siamese-model/run.py train \
 -dt1 data/dat_train_a.conll \
 -dt2 data/dat_train_b.conll \
 -dtl data/labels_train.conll \
