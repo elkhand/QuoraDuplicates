@@ -45,7 +45,7 @@ class Config:
     hidden_size = 1000
     batch_size = 100
     n_epochs = 100
-    max_grad_norm = 5.
+    max_grad_norm = 10.
     lr = 0.001
 
     def __init__(self, args):
@@ -192,6 +192,9 @@ class RNNModel(Model):
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
+        U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
+        b = tf.Variable(initial_value=np.zeros((1,)), dtype=tf.float32)
+
         # Initialize state as vector of zeros.
         h1 = tf.fill([tf.shape(x1)[0], self.config.hidden_size], 0.0)
         c1 = tf.fill([tf.shape(x1)[0], self.config.hidden_size], 0.0)
@@ -210,8 +213,7 @@ class RNNModel(Model):
                 _, h2, c2 = cell2(x_t, h2, c2)
             h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
-        l1_norm = tf.reduce_sum(tf.abs(h1_drop - h2_drop), 1)
-        preds = tf.exp(-l1_norm)
+        preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
 
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
         return preds
@@ -228,8 +230,7 @@ class RNNModel(Model):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        # loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=2.0))
-        loss =  tf.nn.l2_loss(preds - self.labels_placeholder)
+        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=2.0))
         return loss
 
     def add_training_op(self, loss):
@@ -251,8 +252,7 @@ class RNNModel(Model):
         Returns:
             train_op: The Op for training.
         """
-        # optimizer = tf.train.AdamOptimizer()
-        optimizer = tf.train.AdadeltaOptimizer()
+        optimizer = tf.train.AdamOptimizer()
         grads_and_vars = optimizer.compute_gradients(loss)
         grads, grad_vars = zip(*grads_and_vars)
         grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.config.max_grad_norm)
