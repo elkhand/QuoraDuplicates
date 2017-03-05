@@ -13,7 +13,7 @@ import numpy as np
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from q2_rnn_cell import RNNCell
+from lstm_cell import LSTMCell
 from q3_gru_cell import GRUCell
 
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
@@ -49,8 +49,8 @@ class Config:
     lr = 0.001
 
     def __init__(self, args):
-        self.cell1 = "gru"
-        self.cell2 = "gru"
+        self.cell1 = "lstm"
+        self.cell2 = "lstm"
 
         if "output_path" in args:
             # Where to save things.
@@ -178,53 +178,43 @@ class RNNModel(Model):
         x1 = self.add_embedding(1)
         x2 = self.add_embedding(2)
         dropout_rate = self.dropout_placeholder
-        h_step1 = []
-        h_step2 = []
 
-        # Use the cell defined below. For Q2, we will just be using the
-        # RNNCell you defined, but for Q3, we will run this code again
-        # with a GRU cell!
-        if self.config.cell1 == "rnn":
-            cell1 = RNNCell(Config.n_features * Config.embed_size, Config.hidden_size)
+        if self.config.cell1 == "lstm":
+            cell1 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
         elif self.config.cell1 == "gru":
             cell1 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
-        if self.config.cell2 == "rnn":
-            cell2 = RNNCell(Config.n_features * Config.embed_size, Config.hidden_size)
+        if self.config.cell2 == "lstm":
+            cell2 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
         elif self.config.cell2 == "gru":
             cell2 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
-        # Define U and b2 as variables.
-        xavier_init = tf.contrib.layers.xavier_initializer()
-        # U = tf.get_variable("U", dtype=np.float32, initializer=np.identity(self.config.hidden_size, dtype=np.float32))
-        b_2 = tf.Variable(initial_value=np.zeros((1,1)), dtype=np.float32)
-
         # Initialize state as vector of zeros.
         h1 = tf.fill([tf.shape(x1)[0], self.config.hidden_size], 0.0)
+        c1 = tf.fill([tf.shape(x1)[0], self.config.hidden_size], 0.0)
         h2 = tf.fill([tf.shape(x2)[0], self.config.hidden_size], 0.0)
-        with tf.variable_scope("RNN1"):
+        c2 = tf.fill([tf.shape(x2)[0], self.config.hidden_size], 0.0)
+        with tf.variable_scope("LSTM"):
             for time_step in range(self.max_length):
                 x_t = x1[:, time_step, :]
-                o_t, h1 = cell1(x_t, h1)
-                h_step1.append(h1)
-                tf.get_variable_scope().reuse_variables()
-            o_drop_t1 = tf.nn.dropout(o_t, keep_prob=dropout_rate)
-        with tf.variable_scope("RNN2"):
+                _, h1, c1 = cell1(x_t, h1, c1)
+                if time_step == 0:
+                    tf.get_variable_scope().reuse_variables()
+            h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
+
             for time_step in range(self.max_length):
                 x_t = x2[:, time_step, :]
-                o_t, h2 = cell2(x_t, h2)
-                h_step2.append(h2)
-                tf.get_variable_scope().reuse_variables()
-            o_drop_t2 = tf.nn.dropout(o_t, keep_prob=dropout_rate)
+                _, h2, c2 = cell2(x_t, h2, c2)
+            h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
-        # use U and b2 for final prediction
-        preds = tf.reduce_sum(o_drop_t1 * o_drop_t2, 1, keep_dims=True) + b_2 #(None, n_classes)
+        l1_norm = tf.reduce_sum(tf.abs(h1_drop - h2_drop), 1)
+        preds = tf.exp(-l1_norm)
 
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
-        return preds[:,0]
+        return preds
 
     def add_loss_op(self, preds):
         """Adds Ops for the loss function to the computational graph.
@@ -238,7 +228,8 @@ class RNNModel(Model):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=2.0))
+        # loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=2.0))
+        loss =  tf.nn.l2_loss(preds - self.labels_placeholder)
         return loss
 
     def add_training_op(self, loss):
