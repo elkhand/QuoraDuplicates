@@ -58,31 +58,40 @@ class LSTMCell(tf.nn.rnn_cell.RNNCell):
         # be defined elsewhere!
         with tf.variable_scope(scope):
             ### YOUR CODE HERE (~6-10 lines)
-            xavier_init = tf.contrib.layers.xavier_initializer()
+            # xavier_init = tf.contrib.layers.xavier_initializer()
+            mean = 0
+            stddev = 0.15
 
-            W_i = tf.get_variable("W_i", [self._state_size, self._state_size], initializer=xavier_init)
-            b_i = tf.get_variable("b_i", initializer =np.array(np.zeros([1, self._state_size]), dtype=np.float32))
-            W_f = tf.get_variable("W_f", [self._state_size, self._state_size], initializer=xavier_init)
-            b_f = tf.get_variable("b_f", initializer =np.array(np.zeros([1, self._state_size]), dtype=np.float32))
-            W_o = tf.get_variable("W_o", [self._state_size, self._state_size], initializer=xavier_init)
-            b_o = tf.get_variable("b_o", initializer =np.array(np.zeros([1, self._state_size]), dtype=np.float32))
-            W_c = tf.get_variable("W_c", [self._state_size, self._state_size], initializer=xavier_init)
-            b_c = tf.get_variable("b_c", initializer =np.array(np.zeros([1, self._state_size]), dtype=np.float32))
+            W_shape = [self.input_size, self._state_size]
+            U_shape = [self._state_size, self._state_size]
+            b_shape = [1, self._state_size]
+            b_initial_value = tf.constant(2.0, dtype=np.float32, shape=b_shape)  # except the forget gate
 
-            i_t = tf.sigmoid(tf.matmul(inputs, W_i) + tf.matmul(state, W_i) + b_i)
-            f_t = tf.sigmoid(tf.matmul(inputs, W_f) + tf.matmul(state, W_f) + b_f)
-            o_t = tf.sigmoid(tf.matmul(inputs, W_o) + tf.matmul(state, W_o) + b_o)
-            c_t = f_t * cand + i_t * tf.tanh(tf.matmul(inputs, W_c) + tf.matmul(state, W_c) + b_c)
+            W_i = tf.get_variable("W_i", initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
+            U_i = tf.get_variable("U_i", initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
+            b_i = tf.get_variable("b_i", initializer=b_initial_value)
+
+            W_f = tf.get_variable("W_f", initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
+            U_f = tf.get_variable("U_f", initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
+            b_f = tf.get_variable("b_f", initializer=tf.constant(2.5, dtype=np.float32, shape=b_shape))
+
+            W_o = tf.get_variable("W_o", initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
+            U_o = tf.get_variable("U_o", initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
+            b_o = tf.get_variable("b_o", initializer=b_initial_value)
+
+            W_c = tf.get_variable("W_c", initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
+            U_c = tf.get_variable("U_c", initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
+            b_c = tf.get_variable("b_c", initializer=b_initial_value)
+
+            i_t = tf.sigmoid(tf.matmul(inputs, W_i) + tf.matmul(state, U_i) + b_i)
+            f_t = tf.sigmoid(tf.matmul(inputs, W_f) + tf.matmul(state, U_f) + b_f)
+            o_t = tf.sigmoid(tf.matmul(inputs, W_o) + tf.matmul(state, U_o) + b_o)
+            chat_t = tf.tanh(tf.matmul(inputs, W_c) + tf.matmul(state, U_c) + b_c)
+            c_t = (i_t * chat_t) + (f_t * cand)
             h_t = o_t * tf.tanh(c_t)
-
             ### END YOUR CODE ###
-        # For an RNN , the output and state are the same (N.B. this
-        # isn't true for an LSTM, though we aren't using one of those in
-        # our assignment)
-        new_state = h_t
-        cand = c_t
-        output = new_state
-        return output, new_state, cand
+
+        return o_t, h_t, c_t
 
 # def test_rnn_cell():
 #     with tf.Graph().as_default():
