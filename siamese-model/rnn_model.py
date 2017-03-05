@@ -45,7 +45,7 @@ class Config:
     hidden_size = 1000
     batch_size = 100
     n_epochs = 100
-    max_grad_norm = 10.
+    max_grad_norm = 5.
     lr = 0.001
 
     def __init__(self, args):
@@ -251,13 +251,11 @@ class RNNModel(Model):
         Returns:
             train_op: The Op for training.
         """
-        optimizer = tf.train.AdamOptimizer()
+        # optimizer = tf.train.AdamOptimizer()
+        optimizer = tf.train.AdadeltaOptimizer()
         grads_and_vars = optimizer.compute_gradients(loss)
         grads, grad_vars = zip(*grads_and_vars)
         grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.config.max_grad_norm)
-
-        self.grad_norm = tf.global_norm(grads)
-
         train_op = optimizer.apply_gradients(zip(grads, grad_vars))
 
         return train_op
