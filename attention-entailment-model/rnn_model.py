@@ -369,16 +369,6 @@ class RNNModel(Model):
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
 
-    def consolidate_predictions(self, examples_raw, examples, preds):
-        """Batch the predictions into groups of sentence length.
-        """
-        assert len(examples_raw) == len(examples)
-        assert len(examples_raw) == len(preds)
-
-        labels = zip(*examples_raw)[2]
-
-        return labels, preds
-
     def predict_on_batch(self, sess, inputs1_batch, inputs2_batch):
         inputs1_batch = np.array(inputs1_batch)
         inputs2_batch = np.array(inputs2_batch)
@@ -415,6 +405,15 @@ class RNNModel(Model):
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
         return (p, r, f1)
 
+    def consolidate_predictions(self, examples_raw, examples, preds):
+        """Batch the predictions into groups of sentence length.
+        """
+        assert len(examples_raw) == len(examples)
+        assert len(examples_raw) == len(preds)
+
+        labels = [x[2] for x in examples_raw]
+
+        return labels, preds
 
     def output(self, sess, inputs_raw, inputs):
         """
@@ -438,22 +437,22 @@ class RNNModel(Model):
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
 
-    def run_epoch(self, sess, train_examples, dev_examples, train, dev):
-        prog = Progbar(target=1 + int(len(train_examples) / self.config.batch_size))
-        for i, batch in enumerate(minibatches(train_examples, self.config.batch_size)):
+    def run_epoch(self, sess, train_processed, dev_processed, train, dev):
+        prog = Progbar(target=1 + int(len(train_processed) / self.config.batch_size))
+        for i, batch in enumerate(minibatches(train_processed, self.config.batch_size)):
             loss = self.train_on_batch(sess, *batch)
             prog.update(i + 1, [("train loss", loss)])
             if self.report: self.report.log_train_loss(loss)
         print("")
 
         #logger.info("Evaluating on training data")
-        #token_cm, entity_scores = self.evaluate(sess, train_examples, train_examples_raw)
+        #token_cm, entity_scores = self.evaluate(sess, train_processed, train_processed_raw)
         #logger.debug("Token-level confusion matrix:\n" + token_cm.as_table())
         #logger.debug("Token-level scores:\n" + token_cm.summary())
         #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         logger.info("Evaluating on development data")
-        entity_scores = self.evaluate(sess, dev_examples, dev)
+        entity_scores = self.evaluate(sess, dev_processed, dev)
         logger.info("P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         f1 = entity_scores[-1]
@@ -462,12 +461,12 @@ class RNNModel(Model):
     def fit(self, sess, saver, train, dev):
         best_score = 0.
 
-        train_examples = self.preprocess_sequence_data(train) # sent1, sent2, label
-        dev_examples = self.preprocess_sequence_data(dev)
+        train_processed = self.preprocess_sequence_data(train) # sent1, sent2, label
+        dev_processed = self.preprocess_sequence_data(dev)
 
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
-            score = self.run_epoch(sess, train_examples, dev_examples, train, dev)
+            score = self.run_epoch(sess, train_processed, dev_processed, train, dev)
             if score > best_score:
                 best_score = score
                 if saver:
