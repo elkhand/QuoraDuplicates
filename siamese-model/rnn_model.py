@@ -70,6 +70,10 @@ class RNNModel(Model):
     Implements a recursive neural network with an embedding layer and
     single hidden layer.
     """
+    def build(self):
+        super(RNNModel, self).build()
+        pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
+        self.predictions = tf.greater(tf.sigmoid(self.pred), pos_thres)
 
     def add_placeholders(self):
         """Generates placeholder variables to represent the input tensors
@@ -263,13 +267,13 @@ class RNNModel(Model):
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
 
+
     def predict_on_batch(self, sess, inputs1_batch, inputs2_batch):
         inputs1_batch = np.array(inputs1_batch)
         inputs2_batch = np.array(inputs2_batch)
         feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch)
 
-        pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
-        predictions = sess.run(tf.greater(tf.sigmoid(self.pred), pos_thres), feed_dict=feed)
+        predictions = sess.run(self.predictions, feed_dict=feed)
         return predictions
 
     def evaluate(self, sess, examples, len_examples_raw):
