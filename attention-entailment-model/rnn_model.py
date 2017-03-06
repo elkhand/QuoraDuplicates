@@ -179,6 +179,8 @@ class RNNModel(Model):
         dropout_rate = self.dropout_placeholder
         h_step1 = []
         h_step2 = []
+        batch_size = tf.shape(x1)[0]
+        hidden_size = self.config.hidden_size
 
         # Use the cell defined below. For Q2, we will just be using the
         # RNNCell you defined, but for Q3, we will run this code again
@@ -202,8 +204,8 @@ class RNNModel(Model):
         b = tf.Variable(initial_value=np.zeros((1,)), dtype=tf.float32)
 
         # Initialize state as vector of zeros.
-        h = tf.fill([tf.shape(x1)[0], self.config.hidden_size], 0.0)
-        c = tf.fill([tf.shape(x1)[0], self.config.hidden_size], 0.0)
+        h = tf.fill([batch_size, self.config.hidden_size], 0.0)
+        c = tf.fill([batch_size, self.config.hidden_size], 0.0)
 
         with tf.variable_scope("LSTM1"):
             for time_step in range(self.max_length):
@@ -221,9 +223,51 @@ class RNNModel(Model):
                 h_step2.append(h)
                 if time_step == 0:
                     tf.get_variable_scope().reuse_variables()
-            h_drop = tf.nn.dropout(h, keep_prob=dropout_rate)
+            last_h = h
+
+        uses_attention = True
+        if uses_attention:
+            W_y = tf.get_variable("W_y", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+            W_h = tf.get_variable("W_h", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+            W_r = tf.get_variable("W_r", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+            w = tf.get_variable("w", shape=[self.config.hidden_size], initializer=xavier_init)
+            W_t = tf.get_variable("W_t", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+            W_p = tf.get_variable("W_p", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+            W_x = tf.get_variable("W_x", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+
+            Y = tf.transpose(tf.pack(h_step1), [1, 0, 2])  # (?, L, hidden_size)
+
+            # Initialize r_0 to zeros.
+            r_t = tf.fill([batch_size, self.config.hidden_size], 0.0)
+
+            # Precompute W_y * Y, because it's used many times in the loop.
+            # Y's shape is (?, L, hidden_size)
+            # W_y's shape is (hidden_size, hidden_size)
+            tmp = tf.reshape(Y, [-1, hidden_size])  # (? * L, hidden_size)
+            tmp2 = tf.matmul(tmp, W_y)  # (? * L, hidden_size)
+            W_y_Y = tf.reshape(tmp2, [-1, self.max_length, hidden_size])  # (?, L, hidden_size)
+
+            for time_step in range(self.max_length):
+                h_t = h_step2[time_step]
+
+                # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
+                tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
+                tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
+                M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, k)
+
+                # alpha_t = softmax(w^T * M_t)
+                alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2))  # (?, L)
+
+                # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
+                tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
+                Y_alpha_t = tf.reduce_sum(Y * tmp3, 1)  # (?, hidden_size)
+                r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size)
+
+            # h* = tanh((W_p * r_L) + (W_x * h_N))
+            last_h = tf.tanh(tf.matmul(r_t, W_p) + tf.matmul(last_h, W_x))  # (?, hidden_size)
 
         # use U and b2 for final prediction
+        h_drop = tf.nn.dropout(last_h, keep_prob=dropout_rate)
         preds = tf.reduce_sum(U * h_drop, 1) + b
 
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
