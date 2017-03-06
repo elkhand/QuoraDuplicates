@@ -332,7 +332,7 @@ class RNNModel(Model):
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
 
-    def run_epoch(self, sess, train_examples, dev_examples, train, dev):
+    def run_epoch(self, sess, train_padded, dev_padded, train, dev):
         prog = Progbar(target=1 + int(len(train_examples) / self.config.batch_size))
         for i, batch in enumerate(minibatches(train_examples, self.config.batch_size)):
             loss = self.train_on_batch(sess, *batch)
@@ -356,12 +356,13 @@ class RNNModel(Model):
     def fit(self, sess, saver, train, dev):
         best_score = 0.
 
-        train_examples = self.preprocess_sequence_data(train) # sent1, sent2, label
-        dev_examples = self.preprocess_sequence_data(dev)
+        # Padded sentences
+        train_padded = self.preprocess_sequence_data(train) # sent1, sent2, label
+        dev_padded = self.preprocess_sequence_data(dev)
 
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
-            score = self.run_epoch(sess, train_examples, dev_examples, train, dev)
+            score = self.run_epoch(sess, train_padded, dev_padded, train, dev)
             if score > best_score:
                 best_score = score
                 if saver:
