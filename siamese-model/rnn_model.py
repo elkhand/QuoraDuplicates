@@ -282,15 +282,16 @@ class RNNModel(Model):
         predictions = sess.run(tf.greater(tf.sigmoid(self.pred), pos_thres), feed_dict=feed)
         return predictions
 
-    def evaluate(self, sess, examples, examples_raw):
+    def evaluate(self, sess, examples, len_examples_raw):
+    #def evaluate(self, sess, examples, examples_raw):
         """Evaluates model performance on @examples.
 
         This function uses the model to predict labels for @examples and constructs a confusion matrix.
 
         Args:
             sess: the current TensorFlow session.
-            examples: A list of vectorized input/output pairs.
-            examples: A list of the original input/output sequence pairs.
+            examples: A list of vectorized input/output pairs. Examples is padded.
+            examples: A list of the original input/output sequence pairs. Raw input,un-processed.
         Returns:
             The F1 score for predicting tokens as named entities.
         """
@@ -333,8 +334,8 @@ class RNNModel(Model):
         return loss
 
     def run_epoch(self, sess, train_padded, dev_padded, train, dev):
-        prog = Progbar(target=1 + int(len(train_examples) / self.config.batch_size))
-        for i, batch in enumerate(minibatches(train_examples, self.config.batch_size)):
+        prog = Progbar(target=1 + int(len(train_padded) / self.config.batch_size))
+        for i, batch in enumerate(minibatches(train_padded, self.config.batch_size)):
             loss = self.train_on_batch(sess, *batch)
             prog.update(i + 1, [("train loss", loss)])
             if self.report: self.report.log_train_loss(loss)
@@ -347,7 +348,8 @@ class RNNModel(Model):
         #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         logger.info("Evaluating on development data")
-        entity_scores = self.evaluate(sess, dev_examples, dev)
+        #entity_scores = self.evaluate(sess, dev_padded, dev)
+        entity_scores = self.evaluate(sess, dev_padded, len(dev))
         logger.info("P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         f1 = entity_scores[-1]
