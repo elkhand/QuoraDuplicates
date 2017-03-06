@@ -293,7 +293,7 @@ class RNNModel(Model):
         preds = self.output(sess, examples) #*
         assert len_examples_raw == len(examples)
         assert len_examples_raw == len(preds)
-        labels = zip(*examples_raw)[2]
+        labels = [x[2] for x in examples_raw]
         labels, preds = np.array(labels), np.array(preds)
 
         correct_preds = np.logical_and(labels==1, preds==1).sum()
