@@ -391,7 +391,6 @@ class RNNModel(Model):
             The F1 score for predicting tokens as named entities.
         """
 
-        #labels, preds = self.output(sess, examples_raw, examples) #*
         labels, preds = self.output(sess, examples_raw, examples) #*
         labels, preds = np.array(labels), np.array(preds)
 
