@@ -314,10 +314,9 @@ class RNNModel(Model):
             # h* = tanh((W_p * r_L) + (W_x * h_N))
             last_h_b = tf.tanh(tf.matmul(r_t, W_p) + tf.matmul(last_h_b, W_x))  # (?, hidden_size)
 
-            # combine both forward and backward attention
-            last_h = last_h_a + last_h_b
-
-
+        # combine both a and b attention
+        last_h = last_h_a + last_h_b
+        
         # use U and b2 for final prediction
         h_drop = tf.nn.dropout(last_h, keep_prob=dropout_rate)
         preds = tf.reduce_sum(U * h_drop, 1) + b
