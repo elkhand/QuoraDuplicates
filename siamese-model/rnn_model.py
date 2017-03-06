@@ -70,6 +70,10 @@ class RNNModel(Model):
     Implements a recursive neural network with an embedding layer and
     single hidden layer.
     """
+    def build(self):
+        super(RNNModel, self).build()
+        pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
+        self.predictions = tf.greater(tf.sigmoid(self.pred), pos_thres)
 
     def add_placeholders(self):
         """Generates placeholder variables to represent the input tensors
