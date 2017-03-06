@@ -55,11 +55,10 @@ class Config:
             # Where to save things.
             self.output_path = args.output_path
         else:
-            self.output_path = "results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell1, datetime.now())
+            self.output_path = "results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
         self.model_output = self.output_path + "model.weights"
         self.eval_output = self.output_path + "results.txt"
-        self.conll1_output = self.output_path + "{}_predictions.conll".format(self.cell1)
-        self.conll2_output = self.output_path + "{}_predictions.conll".format(self.cell2)
+        self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
 
         self.log_output = self.output_path + "log"
 
