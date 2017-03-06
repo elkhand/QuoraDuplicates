@@ -71,6 +71,11 @@ class RNNModel(Model):
     single hidden layer.
     """
 
+    def ___init__(self):
+        super(RNNModel, self).__init__()
+        pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
+        self.predictions = tf.greater(tf.sigmoid(self.pred), pos_thres)
+
     def add_placeholders(self):
         """Generates placeholder variables to represent the input tensors
 
@@ -280,8 +285,6 @@ class RNNModel(Model):
         inputs2_batch = np.array(inputs2_batch)
         feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch)
 
-        pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
-        self.predictions = tf.greater(tf.sigmoid(self.pred), pos_thres)
         predictions = sess.run(self.predictions, feed_dict=feed)
         return predictions
 
