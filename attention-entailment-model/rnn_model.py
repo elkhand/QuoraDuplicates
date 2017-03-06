@@ -392,7 +392,7 @@ class RNNModel(Model):
         """
 
         #labels, preds = self.output(sess, examples_raw, examples) #*
-        preds = self.output(sess, examples_raw, examples) #*
+        labels, preds = self.output(sess, examples_raw, examples) #*
         labels, preds = np.array(labels), np.array(preds)
 
         correct_preds = np.logical_and(labels==1, preds==1).sum()
