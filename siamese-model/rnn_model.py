@@ -264,15 +264,15 @@ class RNNModel(Model):
         return pad_sequences(examples, self.max_length)
 
     #def consolidate_predictions(self, examples_raw, examples, preds):
-    def consolidate_predictions(self, len_examples_raw, examples, preds):
-        """Batch the predictions into groups of sentence length.
-        """
-        assert len_examples_raw == len(examples)
-        assert len_examples_raw == len(preds)
+    # def consolidate_predictions(self, len_examples_raw, examples, preds):
+    #     """Batch the predictions into groups of sentence length.
+    #     """
+    #     assert len_examples_raw == len(examples)
+    #     assert len_examples_raw == len(preds)
 
-        labels = zip(*examples_raw)[2]
+    #     labels = zip(*examples_raw)[2]
 
-        return labels, preds
+    #     return labels, preds
 
     def predict_on_batch(self, sess, inputs1_batch, inputs2_batch):
         inputs1_batch = np.array(inputs1_batch)
@@ -298,7 +298,10 @@ class RNNModel(Model):
         """
 
         #labels, preds = self.output(sess, examples_raw, examples) #*
-        labels, preds = self.output(sess, len_examples_raw, examples) #*
+        preds = self.output(sess, len_examples_raw, examples) #*
+        assert len_examples_raw == len(examples)
+        assert len_examples_raw == len(preds)
+        labels = zip(*examples_raw)[2]
         labels, preds = np.array(labels), np.array(preds)
 
         correct_preds = np.logical_and(labels==1, preds==1).sum()
@@ -328,7 +331,8 @@ class RNNModel(Model):
             preds += list(preds_)
             prog.update(i + 1, [])
         #return self.consolidate_predictions(inputs_raw, inputs, preds)
-        return self.consolidate_predictions(len_inputs_raw, inputs, preds)
+        #return self.consolidate_predictions(len_inputs_raw, inputs, preds)
+        return preds
 
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, labels_batch):
         feed = self.create_feed_dict(inputs1_batch, inputs2_batch, labels_batch=labels_batch,
