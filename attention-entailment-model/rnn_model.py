@@ -380,7 +380,8 @@ class RNNModel(Model):
         feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch)
 
         pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
-        predictions = sess.run(tf.greater(tf.sigmoid(self.pred), pos_thres), feed_dict=feed)
+        self.predictions = tf.greater(tf.sigmoid(self.pred), pos_thres)
+        predictions = sess.run(self.predictions, feed_dict=feed)
         return predictions
 
     def evaluate(self, sess, examples, examples_raw):
