@@ -46,8 +46,7 @@ class Config:
     n_epochs = 10
     max_grad_norm = 10.
     lr = 0.005
-    uses_attention = True
-    uses_wbw_attention = False
+    uses_attention = True #wbw attention
 
     def __init__(self, args):
         self.cell = "lstm"
