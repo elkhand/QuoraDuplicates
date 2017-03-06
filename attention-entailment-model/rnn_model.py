@@ -191,13 +191,9 @@ class RNNModel(Model):
         if self.config.cell == "lstm":
             cell1 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
             cell2 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
-            cell3 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
-            cell4 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
         elif self.config.cell == "gru":
             cell1 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
             cell2 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
-            cell3 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
-            cell4 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
@@ -235,7 +231,7 @@ class RNNModel(Model):
         with tf.variable_scope("LSTM_B1"):
             for time_step in range(self.max_length):
                 x_t = x2[:, time_step, :]
-                _, h, c = cell3(x_t, h, c)
+                _, h, c = cell1(x_t, h, c)
                 h_step_b1.append(h)
                 if time_step == 0:
                     tf.get_variable_scope().reuse_variables()
@@ -244,7 +240,7 @@ class RNNModel(Model):
         with tf.variable_scope("LSTM_B2"):
             for time_step in range(self.max_length):
                 x_t = x1[:, time_step, :]
-                _, h, c = cell4(x_t, h, c)
+                _, h, c = cell2(x_t, h, c)
                 h_step_b2.append(h)
                 if time_step == 0:
                     tf.get_variable_scope().reuse_variables()
