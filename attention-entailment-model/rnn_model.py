@@ -273,7 +273,7 @@ class RNNModel(Model):
             r_t = tf.fill([batch_size, self.config.hidden_size], 0.0)
 
             for time_step in range(self.max_length):
-                h_t = last_h_a
+                h_t = h_step_a2[time_step]
 
                 # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
                 tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
@@ -296,7 +296,7 @@ class RNNModel(Model):
             r_t = tf.fill([batch_size, self.config.hidden_size], 0.0)
 
             for time_step in range(self.max_length):
-                h_t = last_h_b
+                h_t = h_step_b2[time_step]
 
                 # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
                 tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
@@ -316,7 +316,7 @@ class RNNModel(Model):
 
         # combine both a and b attention
         last_h = last_h_a + last_h_b
-        
+
         # use U and b2 for final prediction
         h_drop = tf.nn.dropout(last_h, keep_prob=dropout_rate)
         preds = tf.reduce_sum(U * h_drop, 1) + b
