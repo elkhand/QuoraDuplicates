@@ -46,10 +46,11 @@ class Config:
     n_epochs = 10
     max_grad_norm = 10.
     lr = 0.005
+    uses_attention = True
+    uses_wbw_attention = False
 
     def __init__(self, args):
-        self.cell1 = "lstm"
-        self.cell2 = "lstm"
+        self.cell = "lstm"
 
         if "output_path" in args:
             # Where to save things.
@@ -177,24 +178,23 @@ class RNNModel(Model):
         x1 = self.add_embedding(1)
         x2 = self.add_embedding(2)
         dropout_rate = self.dropout_placeholder
-        h_step1 = []
-        h_step2 = []
         batch_size = tf.shape(x1)[0]
         hidden_size = self.config.hidden_size
+        h_step_a1, h_step_a2, h_step_b1, h_step_b2 = list(), list(), list(), list()
 
         # Use the cell defined below. For Q2, we will just be using the
         # RNNCell you defined, but for Q3, we will run this code again
         # with a GRU cell!
-        if self.config.cell1 == "lstm":
+        if self.config.cell == "lstm":
             cell1 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
-        elif self.config.cell1 == "gru":
-            cell1 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
-        else:
-            raise ValueError("Unsuppported cell type: " + self.config.cell)
-        if self.config.cell2 == "lstm":
             cell2 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
-        elif self.config.cell2 == "gru":
+            cell3 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
+            cell4 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
+        elif self.config.cell == "gru":
+            cell1 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
             cell2 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
+            cell3 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
+            cell4 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
@@ -207,26 +207,48 @@ class RNNModel(Model):
         h = tf.fill([batch_size, self.config.hidden_size], 0.0)
         c = tf.fill([batch_size, self.config.hidden_size], 0.0)
 
-        with tf.variable_scope("LSTM1"):
+        with tf.variable_scope("LSTM_A1"):
             for time_step in range(self.max_length):
                 x_t = x1[:, time_step, :]
                 _, h, c = cell1(x_t, h, c)
-                h_step1.append(h)
+                h_step_a1.append(h)
                 if time_step == 0:
                     tf.get_variable_scope().reuse_variables()
 
         # use h from output of first lstm as input to 2nd
-        with tf.variable_scope("LSTM2"):
+        with tf.variable_scope("LSTM_A2"):
             for time_step in range(self.max_length):
                 x_t = x2[:, time_step, :]
                 _, h, c = cell2(x_t, h, c)
-                h_step2.append(h)
+                h_step_a2.append(h)
                 if time_step == 0:
                     tf.get_variable_scope().reuse_variables()
-            last_h = h
+            last_h_a = h
 
-        uses_attention = True
-        if uses_attention:
+        # Initialize state as vector of zeros.
+        h = tf.fill([batch_size, self.config.hidden_size], 0.0)
+        c = tf.fill([batch_size, self.config.hidden_size], 0.0)
+
+        with tf.variable_scope("LSTM_B1"):
+            for time_step in range(self.max_length):
+                x_t = x2[:, time_step, :]
+                _, h, c = cell3(x_t, h, c)
+                h_step_b1.append(h)
+                if time_step == 0:
+                    tf.get_variable_scope().reuse_variables()
+
+        # use h from output of first lstm as input to 2nd
+        with tf.variable_scope("LSTM_B2"):
+            for time_step in range(self.max_length):
+                x_t = x1[:, time_step, :]
+                _, h, c = cell4(x_t, h, c)
+                h_step_b2.append(h)
+                if time_step == 0:
+                    tf.get_variable_scope().reuse_variables()
+            last_h_b = h
+
+        if self.config.uses_attention:
+
             W_y = tf.get_variable("W_y", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
             W_h = tf.get_variable("W_h", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
             W_r = tf.get_variable("W_r", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
@@ -235,36 +257,67 @@ class RNNModel(Model):
             W_p = tf.get_variable("W_p", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
             W_x = tf.get_variable("W_x", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
 
-            Y = tf.transpose(tf.pack(h_step1), [1, 0, 2])  # (?, L, hidden_size)
-
-            # Initialize r_0 to zeros.
-            r_t = tf.fill([batch_size, self.config.hidden_size], 0.0)
+            Y_a = tf.transpose(tf.pack(h_step_a1), [1, 0, 2])  # (?, L, hidden_size)
+            Y_b = tf.transpose(tf.pack(h_step_b2), [1, 0, 2])
 
             # Precompute W_y * Y, because it's used many times in the loop.
             # Y's shape is (?, L, hidden_size)
             # W_y's shape is (hidden_size, hidden_size)
-            tmp = tf.reshape(Y, [-1, hidden_size])  # (? * L, hidden_size)
+            tmp = tf.reshape(Y_a, [-1, hidden_size])  # (? * L, hidden_size)
             tmp2 = tf.matmul(tmp, W_y)  # (? * L, hidden_size)
-            W_y_Y = tf.reshape(tmp2, [-1, self.max_length, hidden_size])  # (?, L, hidden_size)
+            W_y_Y_a = tf.reshape(tmp2, [-1, self.max_length, hidden_size])  # (?, L, hidden_size)
+            tmp = tf.reshape(Y_b, [-1, hidden_size])  # (? * L, hidden_size)
+            tmp2 = tf.matmul(tmp, W_y)  # (? * L, hidden_size)
+            W_y_Y_b = tf.reshape(tmp2, [-1, self.max_length, hidden_size])  # (?, L, hidden_size)
+
+            # Initialize r_0 to zeros.
+            r_t = tf.fill([batch_size, self.config.hidden_size], 0.0)
 
             for time_step in range(self.max_length):
-                h_t = h_step2[time_step]
+                h_t = last_h_a
 
                 # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
                 tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
                 tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
-                M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, k)
+                M_t = tf.tanh(W_y_Y_a + tmp2)  # (?, L, k)
 
                 # alpha_t = softmax(w^T * M_t)
                 alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2))  # (?, L)
 
                 # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
                 tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
-                Y_alpha_t = tf.reduce_sum(Y * tmp3, 1)  # (?, hidden_size)
+                Y_alpha_t = tf.reduce_sum(Y_a * tmp3, 1)  # (?, hidden_size)
                 r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size)
 
             # h* = tanh((W_p * r_L) + (W_x * h_N))
-            last_h = tf.tanh(tf.matmul(r_t, W_p) + tf.matmul(last_h, W_x))  # (?, hidden_size)
+            last_h_a = tf.tanh(tf.matmul(r_t, W_p) + tf.matmul(last_h_a, W_x))  # (?, hidden_size)
+
+
+            # Initialize r_0 to zeros.
+            r_t = tf.fill([batch_size, self.config.hidden_size], 0.0)
+
+            for time_step in range(self.max_length):
+                h_t = last_h_b
+
+                # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
+                tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
+                tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
+                M_t = tf.tanh(W_y_Y_b + tmp2)  # (?, L, k)
+
+                # alpha_t = softmax(w^T * M_t)
+                alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2))  # (?, L)
+
+                # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
+                tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
+                Y_alpha_t = tf.reduce_sum(Y_b * tmp3, 1)  # (?, hidden_size)
+                r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size)
+
+            # h* = tanh((W_p * r_L) + (W_x * h_N))
+            last_h_b = tf.tanh(tf.matmul(r_t, W_p) + tf.matmul(last_h_b, W_x))  # (?, hidden_size)
+
+            # combine both forward and backward attention
+            last_h = last_h_a + last_h_b
+
 
         # use U and b2 for final prediction
         h_drop = tf.nn.dropout(last_h, keep_prob=dropout_rate)
