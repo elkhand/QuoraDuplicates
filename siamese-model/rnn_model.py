@@ -286,7 +286,6 @@ class RNNModel(Model):
             The F1 score for predicting tokens as named entities.
         """
 
-        #labels, preds = self.output(sess, examples_raw, examples) #*
         preds = self.output(sess, examples) #*
         assert len_examples_raw == len(examples)
         assert len_examples_raw == len(preds)
@@ -304,13 +303,12 @@ class RNNModel(Model):
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
         return (p, r, f1)
 
-    #def output(self, sess, inputs_raw, inputs):
     def output(self, sess, inputs):
         """
         Reports the output of the model on examples (uses helper to featurize each example).
         """
         if inputs is None:
-            inputs = self.preprocess_sequence_data(self.helper.vectorize(inputs_raw))
+            raise ValueError('inputs cannot be None')
 
         preds = []
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
@@ -319,8 +317,6 @@ class RNNModel(Model):
             preds_ = self.predict_on_batch(sess, *batch)
             preds += list(preds_)
             prog.update(i + 1, [])
-        #return self.consolidate_predictions(inputs_raw, inputs, preds)
-        #return self.consolidate_predictions(len_inputs_raw, inputs, preds)
         return preds
 
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, labels_batch):
@@ -344,7 +340,6 @@ class RNNModel(Model):
         #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         logger.info("Evaluating on development data")
-        #entity_scores = self.evaluate(sess, dev_processed, dev)
         entity_scores = self.evaluate(sess, dev_processed, len(dev))
         logger.info("P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 

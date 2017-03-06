@@ -364,16 +364,6 @@ class RNNModel(Model):
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
 
-    def consolidate_predictions(self, examples_raw, examples, preds):
-        """Batch the predictions into groups of sentence length.
-        """
-        assert len(examples_raw) == len(examples)
-        assert len(examples_raw) == len(preds)
-
-        labels = zip(*examples_raw)[2]
-
-        return labels, preds
-
     def predict_on_batch(self, sess, inputs1_batch, inputs2_batch):
         inputs1_batch = np.array(inputs1_batch)
         inputs2_batch = np.array(inputs2_batch)
@@ -383,7 +373,7 @@ class RNNModel(Model):
         predictions = sess.run(tf.greater(tf.sigmoid(self.pred), pos_thres), feed_dict=feed)
         return predictions
 
-    def evaluate(self, sess, examples, examples_raw):
+    def evaluate(self, sess, examples, len_examples_raw):
         """Evaluates model performance on @examples.
 
         This function uses the model to predict labels for @examples and constructs a confusion matrix.
@@ -396,7 +386,10 @@ class RNNModel(Model):
             The F1 score for predicting tokens as named entities.
         """
 
-        labels, preds = self.output(sess, examples_raw, examples) #*
+        #labels, preds = self.output(sess, examples_raw, examples) #*
+        preds = self.output(sess, examples) #*
+        assert len_examples_raw == len(examples)
+        assert len_examples_raw == len(preds)
         labels, preds = np.array(labels), np.array(preds)
 
         correct_preds = np.logical_and(labels==1, preds==1).sum()
@@ -411,12 +404,12 @@ class RNNModel(Model):
         return (p, r, f1)
 
 
-    def output(self, sess, inputs_raw, inputs):
+    def output(self, sess, inputs):
         """
         Reports the output of the model on examples (uses helper to featurize each example).
         """
         if inputs is None:
-            inputs = self.preprocess_sequence_data(self.helper.vectorize(inputs_raw))
+            raise ValueError('inputs cannot be None')
 
         preds = []
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
@@ -425,7 +418,7 @@ class RNNModel(Model):
             preds_ = self.predict_on_batch(sess, *batch)
             preds += list(preds_)
             prog.update(i + 1, [])
-        return self.consolidate_predictions(inputs_raw, inputs, preds)
+        return preds
 
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, labels_batch):
         feed = self.create_feed_dict(inputs1_batch, inputs2_batch, labels_batch=labels_batch,
@@ -433,22 +426,22 @@ class RNNModel(Model):
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
 
-    def run_epoch(self, sess, train_examples, dev_examples, train, dev):
-        prog = Progbar(target=1 + int(len(train_examples) / self.config.batch_size))
-        for i, batch in enumerate(minibatches(train_examples, self.config.batch_size)):
+    def run_epoch(self, sess, train_processed, dev_processed, train, dev):
+        prog = Progbar(target=1 + int(len(train_processed) / self.config.batch_size))
+        for i, batch in enumerate(minibatches(train_processed, self.config.batch_size)):
             loss = self.train_on_batch(sess, *batch)
             prog.update(i + 1, [("train loss", loss)])
             if self.report: self.report.log_train_loss(loss)
         print("")
 
         #logger.info("Evaluating on training data")
-        #token_cm, entity_scores = self.evaluate(sess, train_examples, train_examples_raw)
+        #token_cm, entity_scores = self.evaluate(sess, train_processed, train_processed_raw)
         #logger.debug("Token-level confusion matrix:\n" + token_cm.as_table())
         #logger.debug("Token-level scores:\n" + token_cm.summary())
         #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         logger.info("Evaluating on development data")
-        entity_scores = self.evaluate(sess, dev_examples, dev)
+        entity_scores = self.evaluate(sess, dev_processed, dev)
         logger.info("P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         f1 = entity_scores[-1]
@@ -457,12 +450,12 @@ class RNNModel(Model):
     def fit(self, sess, saver, train, dev):
         best_score = 0.
 
-        train_examples = self.preprocess_sequence_data(train) # sent1, sent2, label
-        dev_examples = self.preprocess_sequence_data(dev)
+        train_processed = self.preprocess_sequence_data(train) # sent1, sent2, label
+        dev_processed = self.preprocess_sequence_data(dev)
 
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
-            score = self.run_epoch(sess, train_examples, dev_examples, train, dev)
+            score = self.run_epoch(sess, train_processed, dev_processed, train, dev)
             if score > best_score:
                 best_score = score
                 if saver:
