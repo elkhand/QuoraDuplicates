@@ -378,7 +378,7 @@ class RNNModel(Model):
 
         return predictions
 
-    def evaluate(self, sess, examples, len_examples_raw):
+    def evaluate(self, sess, examples, examples_raw):
         """Evaluates model performance on @examples.
 
         This function uses the model to predict labels for @examples and constructs a confusion matrix.
@@ -392,10 +392,7 @@ class RNNModel(Model):
         """
 
         #labels, preds = self.output(sess, examples_raw, examples) #*
-        preds = self.output(sess, examples) #*
-        assert len_examples_raw == len(examples)
-        assert len_examples_raw == len(preds)
-        labels = [x[2] for x in examples_raw]
+        preds = self.output(sess, examples_raw, examples) #*
         labels, preds = np.array(labels), np.array(preds)
 
         correct_preds = np.logical_and(labels==1, preds==1).sum()
@@ -409,13 +406,22 @@ class RNNModel(Model):
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
         return (p, r, f1)
 
+    def consolidate_predictions(self, examples_raw, examples, preds):
+        """Batch the predictions into groups of sentence length.
+        """
+        assert len(examples_raw) == len(examples)
+        assert len(examples_raw) == len(preds)
 
-    def output(self, sess, inputs):
+        labels = [x[2] for x in examples_raw]
+
+        return labels, preds
+
+    def output(self, sess, inputs_raw, inputs):
         """
         Reports the output of the model on examples (uses helper to featurize each example).
         """
         if inputs is None:
-            raise ValueError('inputs cannot be None')
+            inputs = self.preprocess_sequence_data(self.helper.vectorize(inputs_raw))
 
         preds = []
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
@@ -424,7 +430,7 @@ class RNNModel(Model):
             preds_ = self.predict_on_batch(sess, *batch)
             preds += list(preds_)
             prog.update(i + 1, [])
-        return preds
+        return self.consolidate_predictions(inputs_raw, inputs, preds)
 
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, labels_batch):
         feed = self.create_feed_dict(inputs1_batch, inputs2_batch, labels_batch=labels_batch,
