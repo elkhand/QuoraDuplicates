@@ -263,20 +263,21 @@ class RNNModel(Model):
         x1 = self.add_embedding(1)
         x2 = self.add_embedding(2)
 
-        # Define U and b as variables.
-        xavier_init = tf.contrib.layers.xavier_initializer()
-        U = tf.get_variable("U", shape=(self.config.hidden_size,), dtype=tf.float32, initializer=xavier_init)
-        b = tf.Variable(initial_value=0.0, dtype=tf.float32)
+        with tf.variable_scope("LSTM_attention"):
+            # Define U and b as variables.
+            xavier_init = tf.contrib.layers.xavier_initializer()
+            U = tf.get_variable("U", shape=(self.config.hidden_size,), dtype=tf.float32, initializer=xavier_init)
+            b = tf.Variable(initial_value=0.0, dtype=tf.float32)
 
-        last_h_a = self.add_asymmetric_prediction_op(x1, x2)
-        tf.get_variable_scope().reuse_variables()
-        last_h_b = self.add_asymmetric_prediction_op(x2, x1)
+            last_h_a = self.add_asymmetric_prediction_op(x1, x2)
+            tf.get_variable_scope().reuse_variables()
+            last_h_b = self.add_asymmetric_prediction_op(x2, x1)
 
-        last_h = last_h_a + last_h_b
+            last_h = last_h_a + last_h_b
 
-        # use U and b for final prediction
-        h_drop = tf.nn.dropout(last_h, keep_prob=self.dropout_placeholder)
-        preds = tf.reduce_sum(U * h_drop, 1) + b
+            # use U and b for final prediction
+            h_drop = tf.nn.dropout(last_h, keep_prob=self.dropout_placeholder)
+            preds = tf.reduce_sum(U * h_drop, 1) + b
 
         return preds
 
