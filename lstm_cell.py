@@ -20,7 +20,10 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 __author__ = 'kyu'
 
-class LSTMCell(tf.nn.rnn_cell.RNNCell):
+# To support TensorFlow 0.12 and 1.0.
+RNNCell = tf.contrib.rnn.RNNCell if hasattr(tf.contrib.rnn, 'RNNCell') else tf.nn.rnn_cell.RNNCell
+
+class LSTMCell(RNNCell):
     """Wrapper around our RNN cell implementation that allows us to play
     nicely with TensorFlow.
     """
