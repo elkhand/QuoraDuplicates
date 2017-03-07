@@ -39,13 +39,13 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 120 # longest sequence to parse
     n_classes = 2
-    dropout = 0.9
+    dropout = 0.5
     embed_size = 100 # todo: make depend on input
-    hidden_size = 100
-    batch_size = 32
-    n_epochs = 10
-    max_grad_norm = 10.
-    lr = 0.005
+    hidden_size = 512
+    batch_size = 100
+    n_epochs = 100
+    max_grad_norm = 5.
+    lr = 0.0001
     uses_attention = True #wbw attention
 
     def __init__(self, args):
