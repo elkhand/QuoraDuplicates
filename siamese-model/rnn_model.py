@@ -267,17 +267,6 @@ class RNNModel(Model):
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
 
-    def consolidate_predictions(self, examples_raw, examples, preds):
-        """Batch the predictions into groups of sentence length.
-        """
-        assert len(examples_raw) == len(examples)
-        assert len(examples_raw) == len(preds)
-
-        labels = zip(*examples_raw)[2]
-
-        return labels, preds
-
-
 
     def predict_on_batch(self, sess, inputs1_batch, inputs2_batch):
         inputs1_batch = np.array(inputs1_batch)
@@ -288,14 +277,15 @@ class RNNModel(Model):
         return predictions
 
     def evaluate(self, sess, examples, examples_raw):
+        #def evaluate(self, sess, examples, examples_raw):
         """Evaluates model performance on @examples.
 
         This function uses the model to predict labels for @examples and constructs a confusion matrix.
 
         Args:
             sess: the current TensorFlow session.
-            examples: A list of vectorized input/output pairs.
-            examples: A list of the original input/output sequence pairs.
+            examples: A list of vectorized input/output pairs. Examples is padded.
+            examples: A list of the original input/output sequence pairs. Raw input,un-processed.
         Returns:
             The F1 score for predicting tokens as named entities.
         """
@@ -313,6 +303,16 @@ class RNNModel(Model):
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
         return (p, r, f1)
+
+    def consolidate_predictions(self, examples_raw, examples, preds):
+        """Batch the predictions into groups of sentence length.
+        """
+        assert len(examples_raw) == len(examples)
+        assert len(examples_raw) == len(preds)
+
+        labels = [x[2] for x in examples_raw]
+
+        return labels, preds
 
 
     def output(self, sess, inputs_raw, inputs):
@@ -337,9 +337,9 @@ class RNNModel(Model):
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
 
-    def run_epoch(self, sess, train_examples, dev_examples, train, dev):
-        prog = Progbar(target=1 + int(len(train_examples) / self.config.batch_size))
-        for i, batch in enumerate(minibatches(train_examples, self.config.batch_size)):
+    def run_epoch(self, sess, train_processed, dev_processed, train, dev):
+        prog = Progbar(target=1 + int(len(train_processed) / self.config.batch_size))
+        for i, batch in enumerate(minibatches(train_processed, self.config.batch_size)):
             loss = self.train_on_batch(sess, *batch)
             prog.update(i + 1, [("train loss", loss)])
             if self.report: self.report.log_train_loss(loss)
@@ -352,7 +352,7 @@ class RNNModel(Model):
         #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         logger.info("Evaluating on development data")
-        entity_scores = self.evaluate(sess, dev_examples, dev)
+        entity_scores = self.evaluate(sess, dev_processed, dev)
         logger.info("P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         f1 = entity_scores[-1]
@@ -361,12 +361,13 @@ class RNNModel(Model):
     def fit(self, sess, saver, train, dev):
         best_score = 0.
 
-        train_examples = self.preprocess_sequence_data(train) # sent1, sent2, label
-        dev_examples = self.preprocess_sequence_data(dev)
+        # Padded sentences
+        train_processed = self.preprocess_sequence_data(train) # sent1, sent2, label
+        dev_processed = self.preprocess_sequence_data(dev)
 
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
-            score = self.run_epoch(sess, train_examples, dev_examples, train, dev)
+            score = self.run_epoch(sess, train_processed, dev_processed, train, dev)
             if score > best_score:
                 best_score = score
                 if saver:
