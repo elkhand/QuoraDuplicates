@@ -42,11 +42,11 @@ class Config:
     n_classes = 2
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
-    hidden_size = 1000
+    hidden_size = 512
     batch_size = 100
     n_epochs = 100
-    max_grad_norm = 10.
-    lr = 0.0003
+    max_grad_norm = 5.
+    lr = 0.0001
 
     def __init__(self, args):
         self.cell1 = "lstm"
@@ -138,7 +138,7 @@ class RNNModel(Model):
         Returns:
             embeddings: tf.Tensor of shape (None, max_length, n_features*embed_size)
         """
-        embeddings = tf.Variable(self.pretrained_embeddings)
+        embeddings = self.pretrained_embeddings
         if ind==1:
             to_concat = tf.nn.embedding_lookup(embeddings, self.input1_placeholder)
         if ind==2:

@@ -39,13 +39,13 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 120 # longest sequence to parse
     n_classes = 2
-    dropout = 0.9
+    dropout = 0.95
     embed_size = 100 # todo: make depend on input
     hidden_size = 100
-    batch_size = 32
-    n_epochs = 10
-    max_grad_norm = 10.
-    lr = 0.005
+    batch_size = 100
+    n_epochs = 100
+    max_grad_norm = 5.
+    lr = 0.0001
     uses_attention = True #wbw attention
 
     def __init__(self, args):
@@ -137,7 +137,7 @@ class RNNModel(Model):
         Returns:
             embeddings: tf.Tensor of shape (None, max_length, n_features*embed_size)
         """
-        embeddings = tf.Variable(self.pretrained_embeddings)
+        embeddings = self.pretrained_embeddings
         if ind==1:
             to_concat = tf.nn.embedding_lookup(embeddings, self.input1_placeholder)
         if ind==2:
@@ -195,8 +195,8 @@ class RNNModel(Model):
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
         # Initialize state as vector of zeros.
-        h = tf.fill([batch_size, self.config.hidden_size], 0.0)
-        c = tf.fill([batch_size, self.config.hidden_size], 0.0)
+        c = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
+        h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
         with tf.variable_scope("LSTM1"):
             for time_step in range(self.max_length):
@@ -206,7 +206,9 @@ class RNNModel(Model):
                 if time_step == 0:
                     tf.get_variable_scope().reuse_variables()
 
-        # use h from output of first lstm as input to 2nd
+        # Use c from the output of the 1st LSTM as input to the 2nd, and reset h.
+        h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
+
         with tf.variable_scope("LSTM2"):
             for time_step in range(self.max_length):
                 x_t = x2[:, time_step, :]
@@ -226,7 +228,7 @@ class RNNModel(Model):
             W_p = tf.get_variable("W_p", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
             W_x = tf.get_variable("W_x", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
 
-            Y = tf.transpose(tf.pack(h_step1), [1, 0, 2])  # (?, L, hidden_size)
+            Y = tf.transpose(tf.stack(h_step1), [1, 0, 2])  # (?, L, hidden_size)
 
             # Precompute W_y * Y, because it's used many times in the loop.
             # Y's shape is (?, L, hidden_size)
@@ -236,7 +238,7 @@ class RNNModel(Model):
             W_y_Y = tf.reshape(tmp2, [-1, self.max_length, hidden_size])  # (?, L, hidden_size)
 
             # Initialize r_0 to zeros.
-            r_t = tf.fill([batch_size, self.config.hidden_size], 0.0)
+            r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
             for time_step in range(self.max_length):
                 h_t = h_step2[time_step]
@@ -263,20 +265,21 @@ class RNNModel(Model):
         x1 = self.add_embedding(1)
         x2 = self.add_embedding(2)
 
-        # Define U and b as variables.
-        xavier_init = tf.contrib.layers.xavier_initializer()
-        U = tf.get_variable("U", shape=(self.config.hidden_size,), dtype=tf.float32, initializer=xavier_init)
-        b = tf.Variable(initial_value=0.0, dtype=tf.float32)
+        with tf.variable_scope("LSTM_attention"):
+            # Define U and b as variables.
+            xavier_init = tf.contrib.layers.xavier_initializer()
+            U = tf.get_variable("U", shape=(self.config.hidden_size,), dtype=tf.float32, initializer=xavier_init)
+            b = tf.Variable(initial_value=0.0, dtype=tf.float32)
 
-        last_h_a = self.add_asymmetric_prediction_op(x1, x2)
-        tf.get_variable_scope().reuse_variables()
-        last_h_b = self.add_asymmetric_prediction_op(x2, x1)
+            last_h_a = self.add_asymmetric_prediction_op(x1, x2)
+            tf.get_variable_scope().reuse_variables()
+            last_h_b = self.add_asymmetric_prediction_op(x2, x1)
 
-        last_h = last_h_a + last_h_b
+            last_h = last_h_a + last_h_b
 
-        # use U and b for final prediction
-        h_drop = tf.nn.dropout(last_h, keep_prob=self.dropout_placeholder)
-        preds = tf.reduce_sum(U * h_drop, 1) + b
+            # use U and b for final prediction
+            h_drop = tf.nn.dropout(last_h, keep_prob=self.dropout_placeholder)
+            preds = tf.reduce_sum(U * h_drop, 1) + b
 
         return preds
 
