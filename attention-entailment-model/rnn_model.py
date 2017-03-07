@@ -195,8 +195,8 @@ class RNNModel(Model):
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
         # Initialize state as vector of zeros.
-        h = tf.fill([batch_size, self.config.hidden_size], 0.0)
-        c = tf.fill([batch_size, self.config.hidden_size], 0.0)
+        c = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
+        h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
         with tf.variable_scope("LSTM1"):
             for time_step in range(self.max_length):
@@ -206,7 +206,9 @@ class RNNModel(Model):
                 if time_step == 0:
                     tf.get_variable_scope().reuse_variables()
 
-        # use h from output of first lstm as input to 2nd
+        # Use c from the output of the 1st LSTM as input to the 2nd, and reset h.
+        h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
+
         with tf.variable_scope("LSTM2"):
             for time_step in range(self.max_length):
                 x_t = x2[:, time_step, :]
@@ -236,7 +238,7 @@ class RNNModel(Model):
             W_y_Y = tf.reshape(tmp2, [-1, self.max_length, hidden_size])  # (?, L, hidden_size)
 
             # Initialize r_0 to zeros.
-            r_t = tf.fill([batch_size, self.config.hidden_size], 0.0)
+            r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
             for time_step in range(self.max_length):
                 h_t = h_step2[time_step]
