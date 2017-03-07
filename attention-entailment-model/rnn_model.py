@@ -226,7 +226,7 @@ class RNNModel(Model):
             W_p = tf.get_variable("W_p", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
             W_x = tf.get_variable("W_x", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
 
-            Y = tf.transpose(tf.pack(h_step1), [1, 0, 2])  # (?, L, hidden_size)
+            Y = tf.transpose(tf.stack(h_step1), [1, 0, 2])  # (?, L, hidden_size)
 
             # Precompute W_y * Y, because it's used many times in the loop.
             # Y's shape is (?, L, hidden_size)
