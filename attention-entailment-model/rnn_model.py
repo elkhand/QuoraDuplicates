@@ -137,7 +137,7 @@ class RNNModel(Model):
         Returns:
             embeddings: tf.Tensor of shape (None, max_length, n_features*embed_size)
         """
-        embeddings = tf.Variable(self.pretrained_embeddings)
+        embeddings = self.pretrained_embeddings
         if ind==1:
             to_concat = tf.nn.embedding_lookup(embeddings, self.input1_placeholder)
         if ind==2:
