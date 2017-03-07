@@ -41,7 +41,7 @@ class Config:
     n_classes = 2
     dropout = 0.5
     embed_size = 100 # todo: make depend on input
-    hidden_size = 512
+    hidden_size = 100
     batch_size = 100
     n_epochs = 100
     max_grad_norm = 5.
