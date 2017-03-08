@@ -408,7 +408,7 @@ class RNNModel(Model):
 
         logger.info("Evaluating on development data")
         entity_scores = self.evaluate(sess, dev_processed, dev)
-        logger.info("P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
+        logger.info("P/R/F1: %.3f/%.3f/%.3f", *entity_scores)
 
         f1 = entity_scores[-1]
         return f1
