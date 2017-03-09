@@ -40,10 +40,10 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 75 # longest sequence to parse
     n_classes = 2
-    dropout = 0.90
+    dropout = 0.95
     embed_size = 100 # todo: make depend on input
     hidden_size = 1000
-    batch_size = 500
+    batch_size = 200
     n_epochs = 15
     max_grad_norm = 5.
     lr = 0.00003
