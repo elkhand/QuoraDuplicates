@@ -42,7 +42,7 @@ class Config:
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
     hidden_size = 200
-    batch_size = 100
+    batch_size = 32
     n_epochs = 100
     max_grad_norm = 10.
     lr = 0.0001
@@ -50,6 +50,7 @@ class Config:
     uses_attention = True #wbw attention
     score_type2 = True
     embeddings_trainable = True
+    pos_weight = .7
 
     def __init__(self, args):
         self.cell = "lstm"
@@ -214,7 +215,7 @@ class RNNModel(Model):
         h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
         with tf.variable_scope("LSTM1"):
-            Y, (c, h) = tf.nn.dynamic_rnn(cell1, x1, sequence_length=self.seqlen1_placeholder, initial_state=LSTMStateTuple(c, h))
+            Y, (c, h) = tf.nn.dynamic_rnn(cell1, x1, initial_state=LSTMStateTuple(c, h))#, sequence_length=self.seqlen1_placeholder
             # for time_step in range(self.max_length):
             #     x_t = x1[:, time_step, :]
             #     _, h, c = cell1(x_t, h, c)
@@ -226,7 +227,7 @@ class RNNModel(Model):
         h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
         with tf.variable_scope("LSTM2"):
-            Y2, (c, h) = tf.nn.dynamic_rnn(cell2, x2, sequence_length=self.seqlen2_placeholder, initial_state=LSTMStateTuple(c, h))
+            Y2, (c, h) = tf.nn.dynamic_rnn(cell2, x2, initial_state=LSTMStateTuple(c, h))#, sequence_length=self.seqlen2_placeholder
             # for time_step in range(self.max_length):
             #     x_t = x2[:, time_step, :]
             #     _, h, c = cell2(x_t, h, c)
@@ -258,6 +259,7 @@ class RNNModel(Model):
             r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
             for time_step in range(self.max_length):
+                
                 h_t = Y2[:, time_step, :]
 
                 if self.config.score_type2:
@@ -320,7 +322,7 @@ class RNNModel(Model):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=2.0))
+        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=self.config.pos_weight))
         return loss
 
     def add_training_op(self, loss):
@@ -377,6 +379,9 @@ class RNNModel(Model):
         labels, preds = self.output(sess, examples_raw, examples) #*
         labels, preds = np.array(labels), np.array(preds)
 
+        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(labels, preds, pos_weight=self.config.pos_weight))
+
+
         correct_preds = np.logical_and(labels==1, preds==1).sum()
         total_preds = float(np.sum(preds==1))
         total_correct = float(np.sum(labels==1))
@@ -386,15 +391,15 @@ class RNNModel(Model):
         p = correct_preds / total_preds if correct_preds > 0 else 0
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        return (p, r, f1)
+        return (p, r, f1, loss)
 
-    def consolidate_predictions(self, examples_raw, examples, preds):
+    def consolidate_predictions(self, examples_raw, examples_processed, preds):
         """Batch the predictions into groups of sentence length.
         """
-        assert len(examples_raw) == len(examples)
+        assert len(examples_raw) == len(examples_processed)
         assert len(examples_raw) == len(preds)
 
-        labels = [x[2] for x in examples_raw]
+        labels = [x[4] for x in examples_processed]
 
         return labels, preds
 
@@ -436,7 +441,7 @@ class RNNModel(Model):
 
         logger.info("Evaluating on development data")
         entity_scores = self.evaluate(sess, dev_processed, dev)
-        logger.info("P/R/F1: %.3f/%.3f/%.3f", *entity_scores)
+        logger.info("P/R/F1: %.3f/%.3f/%.3f/%.4f", *entity_scores)
 
         f1 = entity_scores[-1]
         return f1
