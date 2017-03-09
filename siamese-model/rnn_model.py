@@ -38,7 +38,7 @@ class Config:
     """
     n_word_features = 1 # Number of features for every word in the input.
     n_features = n_word_features # Number of features for every word in the input.
-    max_length = 120 # longest sequence to parse
+    max_length = 35 # longest sequence to parse
     n_classes = 2
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
@@ -49,6 +49,8 @@ class Config:
     lr = 0.0003
     lr_decay_rate = 0.9
     embeddings_trainable = True
+    pos_weight = 1.7
+
 
     def __init__(self, args):
         self.cell = "lstm"
