@@ -49,6 +49,8 @@ class Config:
     lr = 0.0003
     lr_decay_rate = 0.9
     embeddings_trainable = True
+    pos_weight = 1.7
+
 
     def __init__(self, args):
         self.cell = "lstm"

@@ -50,7 +50,7 @@ class Config:
     uses_attention = True #wbw attention
     score_type2 = True
     embeddings_trainable = True
-    pos_weight = .7
+    pos_weight = 1.7
 
     def __init__(self, args):
         self.cell = "lstm"
