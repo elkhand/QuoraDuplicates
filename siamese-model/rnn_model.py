@@ -38,7 +38,7 @@ class Config:
     """
     n_word_features = 1 # Number of features for every word in the input.
     n_features = n_word_features # Number of features for every word in the input.
-    max_length = 120 # longest sequence to parse
+    max_length = 35 # longest sequence to parse
     n_classes = 2
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
