@@ -258,7 +258,7 @@ class RNNModel(Model):
             r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
             for time_step in range(self.max_length):
-                h_t = Y2[time_step]
+                h_t = Y2[:,time_step,:]
 
                 if self.config.score_type2:
                     # M_t = Y .* ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
