@@ -42,25 +42,25 @@ class Config:
     n_classes = 2
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
-    hidden_size = 512
+    hidden_size = 1000
     batch_size = 100
     n_epochs = 100
-    max_grad_norm = 5.
-    lr = 0.0001
+    max_grad_norm = 10.
+    lr = 0.0003
+    lr_decay_rate = 0.9
+    embeddings_trainable = True
 
     def __init__(self, args):
-        self.cell1 = "lstm"
-        self.cell2 = "lstm"
+        self.cell = "lstm"
 
         if "output_path" in args:
             # Where to save things.
             self.output_path = args.output_path
         else:
-            self.output_path = "results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell1, datetime.now())
+            self.output_path = "results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
         self.model_output = self.output_path + "model.weights"
         self.eval_output = self.output_path + "results.txt"
-        self.conll1_output = self.output_path + "{}_predictions.conll".format(self.cell1)
-        self.conll2_output = self.output_path + "{}_predictions.conll".format(self.cell2)
+        self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
 
         self.log_output = self.output_path + "log"
 
@@ -96,9 +96,11 @@ class RNNModel(Model):
         self.input1_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.input2_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,))
+        self.seqlen1_placeholder = tf.placeholder(tf.int32, (None,))
+        self.seqlen2_placeholder = tf.placeholder(tf.int32, (None,))
         self.dropout_placeholder = tf.placeholder(tf.float32, [])
 
-    def create_feed_dict(self, inputs1_batch, inputs2_batch, labels_batch=None, dropout=1):
+    def create_feed_dict(self, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=None, dropout=1):
         """Creates the feed_dict for the dependency parser.
 
         A feed_dict takes the form of:
@@ -119,6 +121,8 @@ class RNNModel(Model):
         feed_dict = {
             self.input1_placeholder: inputs1_batch,
             self.input2_placeholder: inputs2_batch,
+            self.seqlen1_placeholder : seqlen1_batch,
+            self.seqlen2_placeholder : seqlen2_batch,
             self.dropout_placeholder: dropout
         }
         if labels_batch is not None:
@@ -138,7 +142,11 @@ class RNNModel(Model):
         Returns:
             embeddings: tf.Tensor of shape (None, max_length, n_features*embed_size)
         """
-        embeddings = self.pretrained_embeddings
+        if self.config.embeddings_trainable:
+            embeddings = tf.Variable(self.pretrained_embeddings)
+        else:
+            embeddings = self.pretrained_embeddings
+
         if ind==1:
             to_concat = tf.nn.embedding_lookup(embeddings, self.input1_placeholder)
         if ind==2:
@@ -183,16 +191,14 @@ class RNNModel(Model):
         x2 = self.add_embedding(2)
         dropout_rate = self.dropout_placeholder
 
-        if self.config.cell1 == "lstm":
-            cell1 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
+        BasicLSTMCell = tf.contrib.rnn.BasicLSTMCell if hasattr(tf.contrib.rnn, 'BasicLSTMCell') else tf.nn.rnn_cell.BasicLSTMCell
+        LSTMStateTuple = tf.contrib.rnn.LSTMStateTuple if hasattr(tf.contrib.rnn, 'LSTMStateTuple') else tf.nn.rnn_cell.LSTMStateTuple
+
+
+        if self.config.cell == "lstm":
+            cell = BasicLSTMCell(Config.hidden_size)
         elif self.config.cell1 == "gru":
-            cell1 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
-        else:
-            raise ValueError("Unsuppported cell type: " + self.config.cell)
-        if self.config.cell2 == "lstm":
-            cell2 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
-        elif self.config.cell2 == "gru":
-            cell2 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
+            cell = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
@@ -205,16 +211,20 @@ class RNNModel(Model):
         h2 = tf.fill([tf.shape(x2)[0], self.config.hidden_size], 0.0)
         c2 = tf.fill([tf.shape(x2)[0], self.config.hidden_size], 0.0)
         with tf.variable_scope("LSTM"):
-            for time_step in range(self.max_length):
-                x_t = x1[:, time_step, :]
-                _, h1, c1 = cell1(x_t, h1, c1)
-                if time_step == 0:
-                    tf.get_variable_scope().reuse_variables()
+            Y, (c1, h1) = tf.nn.dynamic_rnn(cell, x1, initial_state=LSTMStateTuple(c1, h1), sequence_length=self.seqlen1_placeholder)
+            # for time_step in range(self.max_length):
+            #     x_t = x1[:, time_step, :]
+            #     _, h1, c1 = cell1(x_t, h1, c1)
+            #     if time_step == 0:
+            #         tf.get_variable_scope().reuse_variables()
             h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
 
-            for time_step in range(self.max_length):
-                x_t = x2[:, time_step, :]
-                _, h2, c2 = cell2(x_t, h2, c2)
+            tf.get_variable_scope().reuse_variables()
+
+            Y, (c2, h2) = tf.nn.dynamic_rnn(cell, x2, initial_state=LSTMStateTuple(c2, h2), sequence_length=self.seqlen2_placeholder)
+            # for time_step in range(self.max_length):
+            #     x_t = x2[:, time_step, :]
+            #     _, h2, c2 = cell2(x_t, h2, c2)
             h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
         preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
@@ -256,22 +266,22 @@ class RNNModel(Model):
         Returns:
             train_op: The Op for training.
         """
-        optimizer = tf.train.AdamOptimizer()
-        grads_and_vars = optimizer.compute_gradients(loss)
-        grads, grad_vars = zip(*grads_and_vars)
-        grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.config.max_grad_norm)
-        train_op = optimizer.apply_gradients(zip(grads, grad_vars))
-
+        global_step = tf.Variable(0, trainable=False)
+        starter_learning_rate = self.config.lr
+        learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
+                                                   200000, self.config.lr_decay_rate, staircase=True)
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+        train_op = optimizer.minimize(loss, global_step=global_step)
         return train_op
 
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
 
 
-    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch):
+    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch):
         inputs1_batch = np.array(inputs1_batch)
         inputs2_batch = np.array(inputs2_batch)
-        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch)
+        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch)
 
         predictions = sess.run(self.predictions, feed_dict=feed)
         return predictions
@@ -325,14 +335,14 @@ class RNNModel(Model):
         preds = []
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
         for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
-            batch = batch[:2] # ignore label
+            batch = batch[:4] # ignore label
             preds_ = self.predict_on_batch(sess, *batch)
             preds += list(preds_)
             prog.update(i + 1, [])
         return self.consolidate_predictions(inputs_raw, inputs, preds)
 
-    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, labels_batch):
-        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, labels_batch=labels_batch,
+    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
+        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=labels_batch,
                                      dropout=Config.dropout)
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
@@ -429,7 +439,7 @@ def pad_sequences(data, max_length):
             is the list of labels.
         max_length: the desired length for all input/output sequences.
     Returns:
-        a new list of data points of the structure (sentence', labels', mask).
+        a new list of data points of the structure (sent1, sent2, len1, len2, labels).
         Each of sentence', labels' and mask are of length @max_length.
         See the example above for more details.
     """
@@ -445,11 +455,14 @@ def pad_sequences(data, max_length):
             if i >= max_length:
                 break
             feat_sent1[i] = word
+
         for i, word in enumerate(sentence2):
             if i >= max_length:
                 break
             feat_sent2[i] = word
-        ret.append((feat_sent1, feat_sent2, label))
+        seqlen1 = min(len(sentence1), max_length)
+        seqlen2 = min(len(sentence2), max_length)
+        ret.append((feat_sent1, feat_sent2, seqlen1, seqlen2, label))
     return ret
 
 

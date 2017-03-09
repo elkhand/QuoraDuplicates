@@ -61,7 +61,7 @@ class LSTMCell(RNNCell):
         # be defined elsewhere!
         with tf.variable_scope(scope):
             ### YOUR CODE HERE (~6-10 lines)
-            # xavier_init = tf.contrib.layers.xavier_initializer()
+            xavier_init = tf.contrib.layers.xavier_initializer()
             mean = 0
             stddev = 0.15
 
@@ -70,20 +70,20 @@ class LSTMCell(RNNCell):
             b_shape = [1, self._state_size]
             b_initial_value = tf.constant(2.0, dtype=np.float32, shape=b_shape)  # except the forget gate
 
-            W_i = tf.get_variable("W_i", initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
-            U_i = tf.get_variable("U_i", initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
+            W_i = tf.get_variable("W_i", shape=W_shape, initializer=xavier_init) #initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
+            U_i = tf.get_variable("U_i", shape=U_shape, initializer=xavier_init) #initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
             b_i = tf.get_variable("b_i", initializer=b_initial_value)
 
-            W_f = tf.get_variable("W_f", initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
-            U_f = tf.get_variable("U_f", initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
+            W_f = tf.get_variable("W_f", shape=W_shape, initializer=xavier_init) #initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
+            U_f = tf.get_variable("U_f", shape=U_shape, initializer=xavier_init) #initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
             b_f = tf.get_variable("b_f", initializer=tf.constant(2.5, dtype=np.float32, shape=b_shape))
 
-            W_o = tf.get_variable("W_o", initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
-            U_o = tf.get_variable("U_o", initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
+            W_o = tf.get_variable("W_o", shape=W_shape, initializer=xavier_init) #initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
+            U_o = tf.get_variable("U_o", shape=U_shape, initializer=xavier_init) #initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
             b_o = tf.get_variable("b_o", initializer=b_initial_value)
 
-            W_c = tf.get_variable("W_c", initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
-            U_c = tf.get_variable("U_c", initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
+            W_c = tf.get_variable("W_c", shape=W_shape, initializer=xavier_init) #initializer=tf.random_normal(W_shape, mean=mean, stddev=stddev))
+            U_c = tf.get_variable("U_c", shape=U_shape, initializer=xavier_init) #initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
             b_c = tf.get_variable("b_c", initializer=b_initial_value)
 
             i_t = tf.sigmoid(tf.matmul(inputs, W_i) + tf.matmul(state, U_i) + b_i)

@@ -41,12 +41,15 @@ class Config:
     n_classes = 2
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
-    hidden_size = 100
+    hidden_size = 200
     batch_size = 100
     n_epochs = 100
-    max_grad_norm = 5.
+    max_grad_norm = 10.
     lr = 0.0001
+    lr_decay_rate = 0.9
     uses_attention = True #wbw attention
+    score_type2 = True
+    embeddings_trainable = True
 
     def __init__(self, args):
         self.cell = "lstm"
@@ -94,10 +97,12 @@ class RNNModel(Model):
         """
         self.input1_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.input2_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
+        self.seqlen1_placeholder = tf.placeholder(tf.int32, (None,))
+        self.seqlen2_placeholder = tf.placeholder(tf.int32, (None,))
         self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,))
         self.dropout_placeholder = tf.placeholder(tf.float32, [])
 
-    def create_feed_dict(self, inputs1_batch, inputs2_batch, labels_batch=None, dropout=1):
+    def create_feed_dict(self, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=None, dropout=1):
         """Creates the feed_dict for the dependency parser.
 
         A feed_dict takes the form of:
@@ -118,7 +123,10 @@ class RNNModel(Model):
         feed_dict = {
             self.input1_placeholder: inputs1_batch,
             self.input2_placeholder: inputs2_batch,
+            self.seqlen1_placeholder : seqlen1_batch,
+            self.seqlen2_placeholder : seqlen2_batch,
             self.dropout_placeholder: dropout
+
         }
         if labels_batch is not None:
             feed_dict.update({self.labels_placeholder: labels_batch})
@@ -137,7 +145,11 @@ class RNNModel(Model):
         Returns:
             embeddings: tf.Tensor of shape (None, max_length, n_features*embed_size)
         """
-        embeddings = self.pretrained_embeddings
+        if self.config.embeddings_trainable:
+            embeddings = tf.Variable(self.pretrained_embeddings)
+        else:
+            embeddings = self.pretrained_embeddings
+
         if ind==1:
             to_concat = tf.nn.embedding_lookup(embeddings, self.input1_placeholder)
         if ind==2:
@@ -182,12 +194,15 @@ class RNNModel(Model):
         hidden_size = self.config.hidden_size
         h_step1, h_step2 = list(), list()
 
+        BasicLSTMCell = tf.contrib.rnn.BasicLSTMCell if hasattr(tf.contrib.rnn, 'BasicLSTMCell') else tf.nn.rnn_cell.BasicLSTMCell
+        LSTMStateTuple = tf.contrib.rnn.LSTMStateTuple if hasattr(tf.contrib.rnn, 'LSTMStateTuple') else tf.nn.rnn_cell.LSTMStateTuple
+
         # Use the cell defined below. For Q2, we will just be using the
         # RNNCell you defined, but for Q3, we will run this code again
         # with a GRU cell!
         if self.config.cell == "lstm":
-            cell1 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
-            cell2 = LSTMCell(Config.n_features * Config.embed_size, Config.hidden_size)
+            cell1 = BasicLSTMCell(Config.hidden_size)
+            cell2 = BasicLSTMCell(Config.hidden_size)
         elif self.config.cell == "gru":
             cell1 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
             cell2 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
@@ -199,23 +214,25 @@ class RNNModel(Model):
         h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
         with tf.variable_scope("LSTM1"):
-            for time_step in range(self.max_length):
-                x_t = x1[:, time_step, :]
-                _, h, c = cell1(x_t, h, c)
-                h_step1.append(h)
-                if time_step == 0:
-                    tf.get_variable_scope().reuse_variables()
+            Y, (c, h) = tf.nn.dynamic_rnn(cell1, x1, sequence_length=self.seqlen1_placeholder, initial_state=LSTMStateTuple(c, h))
+            # for time_step in range(self.max_length):
+            #     x_t = x1[:, time_step, :]
+            #     _, h, c = cell1(x_t, h, c)
+            #     h_step1.append(h)
+            #     if time_step == 0:
+            #         tf.get_variable_scope().reuse_variables()
 
         # Use c from the output of the 1st LSTM as input to the 2nd, and reset h.
         h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
         with tf.variable_scope("LSTM2"):
-            for time_step in range(self.max_length):
-                x_t = x2[:, time_step, :]
-                _, h, c = cell2(x_t, h, c)
-                h_step2.append(h)
-                if time_step == 0:
-                    tf.get_variable_scope().reuse_variables()
+            Y2, (c, h) = tf.nn.dynamic_rnn(cell2, x2, sequence_length=self.seqlen2_placeholder, initial_state=LSTMStateTuple(c, h))
+            # for time_step in range(self.max_length):
+            #     x_t = x2[:, time_step, :]
+            #     _, h, c = cell2(x_t, h, c)
+            #     h_step2.append(h)
+            #     if time_step == 0:
+            #         tf.get_variable_scope().reuse_variables()
             last_h = h
 
         if self.config.uses_attention:
@@ -228,7 +245,7 @@ class RNNModel(Model):
             W_p = tf.get_variable("W_p", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
             W_x = tf.get_variable("W_x", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
 
-            Y = tf.transpose(tf.stack(h_step1), [1, 0, 2])  # (?, L, hidden_size)
+            # Y = tf.transpose(tf.stack(h_step1), [1, 0, 2])  # (?, L, hidden_size)
 
             # Precompute W_y * Y, because it's used many times in the loop.
             # Y's shape is (?, L, hidden_size)
@@ -241,15 +258,23 @@ class RNNModel(Model):
             r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
             for time_step in range(self.max_length):
-                h_t = h_step2[time_step]
+                h_t = Y2[time_step]
 
-                # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
-                tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
-                tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
-                M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, k)
+                if self.config.score_type2:
+                    # M_t = Y .* ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
+                    tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
+                    tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
+                    M_t = tf.mul(Y, tmp2) # (?, L, k)
+                    alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2)) # (?, L)
 
-                # alpha_t = softmax(w^T * M_t)
-                alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2))  # (?, L)
+                else:
+                    # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
+                    tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
+                    tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
+                    M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, k)
+
+                    # alpha_t = softmax(w^T * M_t)
+                    alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2))  # (?, L)
 
                 # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
                 tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
@@ -309,25 +334,28 @@ class RNNModel(Model):
 
         for more information.
 
-        Use tf.train.AdamOptimizer for this model.
-        Calling optimizer.minimize() will return a train_op object.
-
         Args:
             loss: Loss tensor, from cross_entropy_loss.
         Returns:
             train_op: The Op for training.
         """
-        optimizer = tf.train.AdamOptimizer()
-        train_op = optimizer.minimize(loss)
+        # Optimizer: set up a variable that's incremented once per batch and
+        # controls the learning rate decay.
+        global_step = tf.Variable(0, trainable=False)
+        starter_learning_rate = self.config.lr
+        learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
+                                                   200000, self.config.lr_decay_rate, staircase=True)
+        optimizer = tf.train.AdadeltaOptimizer(learning_rate=learning_rate)
+        train_op = optimizer.minimize(loss, global_step=global_step)
         return train_op
 
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
 
-    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch):
+    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch):
         inputs1_batch = np.array(inputs1_batch)
         inputs2_batch = np.array(inputs2_batch)
-        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch)
+        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch)
 
         predictions = sess.run(self.predictions, feed_dict=feed)
 
@@ -380,14 +408,14 @@ class RNNModel(Model):
         preds = []
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
         for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
-            batch = batch[:2] # ignore label
+            batch = batch[:4] # ignore label
             preds_ = self.predict_on_batch(sess, *batch)
             preds += list(preds_)
             prog.update(i + 1, [])
         return self.consolidate_predictions(inputs_raw, inputs, preds)
 
-    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, labels_batch):
-        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, labels_batch=labels_batch,
+    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
+        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=labels_batch,
                                      dropout=Config.dropout)
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
@@ -492,6 +520,7 @@ def pad_sequences(data, max_length):
     # Use this zero vector when padding sequences.
     zero_vector = [0] * Config.n_features
 
+
     for sentence1, sentence2, label in data:
         feat_sent1 = zero_vector * max_length
         feat_sent2 = zero_vector * max_length
@@ -499,11 +528,14 @@ def pad_sequences(data, max_length):
             if i >= max_length:
                 break
             feat_sent1[i] = word
+
         for i, word in enumerate(sentence2):
             if i >= max_length:
                 break
             feat_sent2[i] = word
-        ret.append((feat_sent1, feat_sent2, label))
+        seqlen1 = min(len(sentence1), max_length)
+        seqlen2 = min(len(sentence2), max_length)
+        ret.append((feat_sent1, feat_sent2, seqlen1, seqlen2, label))
     return ret
 
 
