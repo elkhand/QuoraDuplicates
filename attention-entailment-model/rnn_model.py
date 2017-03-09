@@ -41,12 +41,14 @@ class Config:
     n_classes = 2
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
-    hidden_size = 100
+    hidden_size = 200
     batch_size = 100
     n_epochs = 100
-    max_grad_norm = 5.
+    max_grad_norm = 10.
     lr = 0.0001
+    lr_decay_rate = 0.65
     uses_attention = True #wbw attention
+    score_type2 = True
 
     def __init__(self, args):
         self.cell = "lstm"
@@ -243,13 +245,21 @@ class RNNModel(Model):
             for time_step in range(self.max_length):
                 h_t = h_step2[time_step]
 
-                # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
-                tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
-                tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
-                M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, k)
+                if self.config.score_type2:
+                    # M_t = Y .* ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
+                    tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
+                    tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
+                    M_t = tf.mul(Y, tmp2) # (?, L, k)
+                    alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2)) # (?, L)
 
-                # alpha_t = softmax(w^T * M_t)
-                alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2))  # (?, L)
+                else:
+                    # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
+                    tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
+                    tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
+                    M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, k)
+
+                    # alpha_t = softmax(w^T * M_t)
+                    alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2))  # (?, L)
 
                 # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
                 tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
@@ -309,16 +319,19 @@ class RNNModel(Model):
 
         for more information.
 
-        Use tf.train.AdamOptimizer for this model.
-        Calling optimizer.minimize() will return a train_op object.
-
         Args:
             loss: Loss tensor, from cross_entropy_loss.
         Returns:
             train_op: The Op for training.
         """
-        optimizer = tf.train.AdamOptimizer()
-        train_op = optimizer.minimize(loss)
+        # Optimizer: set up a variable that's incremented once per batch and
+        # controls the learning rate decay.
+        global_step = tf.Variable(0, trainable=False)
+        starter_learning_rate = self.config.lr
+        learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
+                                                   200000, self.config.lr_decay_rate, staircase=True)
+        optimizer = tf.train.AdadeltaOptimizer(learning_rate=learning_rate)
+        train_op = optimizer.minimize(loss, global_step=global_step)
         return train_op
 
     def preprocess_sequence_data(self, examples):
