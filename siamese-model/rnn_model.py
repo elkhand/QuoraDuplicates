@@ -43,7 +43,7 @@ class Config:
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
     hidden_size = 1000
-    batch_size = 100
+    batch_size = 32
     n_epochs = 100
     max_grad_norm = 10.
     lr = 0.0003
@@ -362,6 +362,8 @@ class RNNModel(Model):
         #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         logger.info("Evaluating on development data")
+
+
         entity_scores = self.evaluate(sess, dev_processed, dev)
         logger.info("P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
