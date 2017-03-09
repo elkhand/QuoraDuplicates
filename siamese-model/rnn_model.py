@@ -42,11 +42,12 @@ class Config:
     n_classes = 2
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
-    hidden_size = 512
+    hidden_size = 1000
     batch_size = 100
     n_epochs = 100
     max_grad_norm = 10.
     lr = 0.0003
+    lr_decay_rate = 0.9
     embeddings_trainable = True
 
     def __init__(self, args):
@@ -261,12 +262,12 @@ class RNNModel(Model):
         Returns:
             train_op: The Op for training.
         """
-        optimizer = tf.train.AdamOptimizer()
-        grads_and_vars = optimizer.compute_gradients(loss)
-        grads, grad_vars = zip(*grads_and_vars)
-        grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.config.max_grad_norm)
-        train_op = optimizer.apply_gradients(zip(grads, grad_vars))
-
+        global_step = tf.Variable(0, trainable=False)
+        starter_learning_rate = self.config.lr
+        learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
+                                                   200000, self.config.lr_decay_rate, staircase=True)
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+        train_op = optimizer.minimize(loss, global_step=global_step)
         return train_op
 
     def preprocess_sequence_data(self, examples):
