@@ -302,6 +302,7 @@ class RNNModel(Model):
 
         labels, preds = self.output(sess, examples_raw, examples) #*
         labels, preds = np.array(labels), np.array(preds)
+        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(labels, preds, pos_weight=self.config.pos_weight))
 
         correct_preds = np.logical_and(labels==1, preds==1).sum()
         total_preds = float(np.sum(preds==1))
@@ -312,7 +313,7 @@ class RNNModel(Model):
         p = correct_preds / total_preds if correct_preds > 0 else 0
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        return (p, r, f1)
+        return (p, r, f1, loss)
 
     def consolidate_predictions(self, examples_raw, examples, preds):
         """Batch the predictions into groups of sentence length.
@@ -365,7 +366,7 @@ class RNNModel(Model):
 
 
         entity_scores = self.evaluate(sess, dev_processed, dev)
-        logger.info("P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
+        logger.info("P/R/F1: %.3f/%.3f/%.3f/%.4f", *entity_scores)
 
         f1 = entity_scores[-1]
         return f1
