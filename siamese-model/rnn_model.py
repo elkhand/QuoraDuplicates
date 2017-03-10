@@ -51,7 +51,7 @@ class Config:
     lr_decay_rate = 0.9
     embeddings_trainable = True
     pos_weight = 1.7
-
+    relu_size = 800
 
     def __init__(self, args):
         self.cell = "lstm"
@@ -207,6 +207,7 @@ class RNNModel(Model):
 
         #U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
         xavier_init = tf.contrib.layers.xavier_initializer()
+
         if self.config.second_hidden_size is None:
             U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
             b = tf.get_variable("b", initializer=xavier_init,  shape=[1,])
