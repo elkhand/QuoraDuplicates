@@ -100,6 +100,8 @@ class RNNModel(Model):
         self.input2_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.seqlen1_placeholder = tf.placeholder(tf.int32, (None,))
         self.seqlen2_placeholder = tf.placeholder(tf.int32, (None,))
+        self.mask1_placeholder = tf.placeholder(tf.float32, (None, self.max_length))
+        self.mask2_placeholder = tf.placeholder(tf.float32, (None, self.max_length))
         self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,))
         self.dropout_placeholder = tf.placeholder(tf.float32, [])
 
@@ -121,13 +123,19 @@ class RNNModel(Model):
         Returns:
             feed_dict: The feed dictionary mapping from placeholders to values.
         """
+
+        max_length = self.config.max_length
+        mask1_batch = [([1.0] * seqlen) + ([0.0] * (max_length - seqlen)) for seqlen in seqlen1_batch]
+        mask2_batch = [([1.0] * seqlen) + ([0.0] * (max_length - seqlen)) for seqlen in seqlen2_batch]
+
         feed_dict = {
             self.input1_placeholder: inputs1_batch,
             self.input2_placeholder: inputs2_batch,
             self.seqlen1_placeholder: seqlen1_batch,
             self.seqlen2_placeholder: seqlen2_batch,
+            self.mask1_placeholder: mask1_batch,
+            self.mask2_placeholder: mask2_batch,
             self.dropout_placeholder: dropout
-
         }
         if labels_batch is not None:
             feed_dict.update({self.labels_placeholder: np.array(labels_batch, dtype=np.float32)})
@@ -158,7 +166,7 @@ class RNNModel(Model):
         embeddings = tf.reshape(to_concat, [-1, self.config.max_length, self.config.n_features* self.config.embed_size])
         return embeddings
 
-    def add_asymmetric_prediction_op(self, x1, x2):
+    def add_asymmetric_prediction_op(self, x1, x2, mask1):
         """Adds the unrolled RNN:
             h_0 = 0
             for t in 1 to T:
@@ -276,7 +284,8 @@ class RNNModel(Model):
                     M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, k)
 
                     # alpha_t = softmax(w^T * M_t)
-                    alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2))  # (?, L)
+                    tmp4 = tf.reduce_sum(M_t * w, 2) * mask1  # (?, L)
+                    alpha_t = tf.nn.softmax(tmp4)  # (?, L)
 
                 # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
                 tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
@@ -298,9 +307,9 @@ class RNNModel(Model):
             U = tf.get_variable("U", shape=(self.config.hidden_size,), dtype=tf.float32, initializer=xavier_init)
             b = tf.Variable(initial_value=0.0, dtype=tf.float32)
 
-            last_h_a = self.add_asymmetric_prediction_op(x1, x2)
+            last_h_a = self.add_asymmetric_prediction_op(x1, x2, self.mask1_placeholder)
             tf.get_variable_scope().reuse_variables()
-            last_h_b = self.add_asymmetric_prediction_op(x2, x1)
+            last_h_b = self.add_asymmetric_prediction_op(x2, x1, self.mask2_placeholder)
 
             last_h = last_h_a + last_h_b
 
