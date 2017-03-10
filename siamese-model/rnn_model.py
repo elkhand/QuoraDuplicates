@@ -205,12 +205,12 @@ class RNNModel(Model):
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
         #U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
-        xavier_init= tf.contrib.layers.xavier_initializer()
+        xavier_init = tf.contrib.layers.xavier_initializer()
         m = 50
-        U = tf.Variable(initializer=xavier_init, [m, 1], dtype=tf.float32)
-        b_u = tf.Variable(initializer=xavier_init,[1,], dtype=tf.float32)
-        b = tf.Variable(initializer=xavier_init, [1, m], dtype=tf.float32)
-        W = tf.Variable(initializer=xavier_init,[self.config.hidden_size, m], dtype=tf.float32)
+        U = tf.get_variable("U",initializer=xavier_init,  shape=[m, 1])
+        b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[1,])
+        b = tf.get_variable("b",initializer=xavier_init,  shape=[1, m])
+        W = tf.get_variable("W",initializer=xavier_init, shape=[self.config.hidden_size, m])
         
         # Initialize state as vector of zeros.
         batch_size = tf.shape(x1)[0]
@@ -238,7 +238,7 @@ class RNNModel(Model):
         #preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
         e1 = tf.matmul(h1_drop, W) + b
         r1 = tf.nn.relu(e1, "r1")
-        e1 = tf.matmul(h2_drop, W) + b
+        e2 = tf.matmul(h2_drop, W) + b
         r1 = tf.nn.relu(e2, "r2")
         preds = tf.matmul(r1 * r2, U) + b_u
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
