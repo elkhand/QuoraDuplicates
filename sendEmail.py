@@ -14,7 +14,7 @@ emaillist = recipients
 
 while(True):
     msg = MIMEMultipart()
-    msg['Subject'] = "CS224N Final Project Experiment"
+    msg['Subject'] = sys.argv[3]#"CS224N Final Project Experiment"
     fromEmail = 'cs224ndlnlp@gmail.com'
     msg['From'] = fromEmail
     msg['Reply-to'] = 'cs224ndlnlp@gmail.com'
