@@ -237,9 +237,9 @@ class RNNModel(Model):
 
         #preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
         e1 = tf.matmul(h1_drop, W) + b
-        r1 = tf.nn.relu(e1, "r1")
+        r1 = tf.nn.relu(e1)
         e2 = tf.matmul(h2_drop, W) + b
-        r1 = tf.nn.relu(e2, "r2")
+        r2 = tf.nn.relu(e2)
         preds = tf.matmul(r1 * r2, U) + b_u
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
         return preds
