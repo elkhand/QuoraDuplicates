@@ -33,7 +33,7 @@ python siamese-model/run.py train \
 -vv data/glwordvectors_1_100.txt
 ```
 
-Running sendEmail script:
+Running sendEmail.py script:
 
 ```
 python sendEmail.py elkhan.dadashov@gmail.com /home/elkhand/QuoraDuplicates/exp_march9_relu_pred.txt
