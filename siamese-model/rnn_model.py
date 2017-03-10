@@ -208,7 +208,7 @@ class RNNModel(Model):
         xavier_init = tf.contrib.layers.xavier_initializer()
         m = 50
         U = tf.get_variable("U",initializer=xavier_init,  shape=[m, 1])
-        b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[1,])
+        b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[])
         b = tf.get_variable("b",initializer=xavier_init,  shape=[1, m])
         W = tf.get_variable("W",initializer=xavier_init, shape=[self.config.hidden_size, m])
         
@@ -240,7 +240,7 @@ class RNNModel(Model):
         r1 = tf.nn.relu(e1)
         e2 = tf.matmul(h2_drop, W) + b
         r2 = tf.nn.relu(e2)
-        preds = tf.matmul(r1 * r2, U) + b_u
+        preds = tf.squeeze(tf.matmul(r1 * r2, U), 1) + b_u
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
         return preds
 
