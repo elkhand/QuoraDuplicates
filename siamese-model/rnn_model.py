@@ -128,7 +128,7 @@ class RNNModel(Model):
             self.dropout_placeholder: dropout
         }
         if labels_batch is not None:
-            feed_dict.update({self.labels_placeholder: labels_batch})
+            feed_dict.update({self.labels_placeholder: np.array(labels_batch, dtype=tf.float32)})
         return feed_dict
 
     def add_embedding(self, ind):
