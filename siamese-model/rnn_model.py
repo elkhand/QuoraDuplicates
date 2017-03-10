@@ -207,10 +207,10 @@ class RNNModel(Model):
         #U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
         xavier_init = tf.contrib.layers.xavier_initializer()
 
-        U = tf.get_variable("U",initializer=xavier_init,  shape=[relu_size, 1])
+        U = tf.get_variable("U",initializer=xavier_init,  shape=[self.config.relu_size, 1])
         b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[])
-        b = tf.get_variable("b",initializer=xavier_init,  shape=[1, relu_size])
-        W = tf.get_variable("W",initializer=xavier_init, shape=[self.config.hidden_size, relu_size])
+        b = tf.get_variable("b",initializer=xavier_init,  shape=[1, self.config.relu_size])
+        W = tf.get_variable("W",initializer=xavier_init, shape=[self.config.hidden_size, self.config.relu_size])
         
         # Initialize state as vector of zeros.
         batch_size = tf.shape(x1)[0]
