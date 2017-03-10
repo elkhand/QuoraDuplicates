@@ -166,7 +166,7 @@ class RNNModel(Model):
         embeddings = tf.reshape(to_concat, [-1, self.config.max_length, self.config.n_features* self.config.embed_size])
         return embeddings
 
-    def add_asymmetric_prediction_op(self, x1, x2, mask1):
+    def add_asymmetric_prediction_op(self, x1, x2, seqlen1, seqlen2, mask1):
         """Adds the unrolled RNN:
             h_0 = 0
             for t in 1 to T:
@@ -223,7 +223,7 @@ class RNNModel(Model):
         h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
         with tf.variable_scope("LSTM1"):
-            Y, (c, h) = tf.nn.dynamic_rnn(cell1, x1, initial_state=LSTMStateTuple(c, h))#, sequence_length=self.seqlen1_placeholder
+            Y, (c, h) = tf.nn.dynamic_rnn(cell1, x1, initial_state=LSTMStateTuple(c, h), sequence_length=seqlen1)
             # for time_step in range(self.max_length):
             #     x_t = x1[:, time_step, :]
             #     _, h, c = cell1(x_t, h, c)
@@ -235,7 +235,7 @@ class RNNModel(Model):
         h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
         with tf.variable_scope("LSTM2"):
-            Y2, (c, h) = tf.nn.dynamic_rnn(cell2, x2, initial_state=LSTMStateTuple(c, h))#, sequence_length=self.seqlen2_placeholder
+            Y2, (c, h) = tf.nn.dynamic_rnn(cell2, x2, initial_state=LSTMStateTuple(c, h), sequence_length=seqlen2)
             # for time_step in range(self.max_length):
             #     x_t = x2[:, time_step, :]
             #     _, h, c = cell2(x_t, h, c)
@@ -274,18 +274,15 @@ class RNNModel(Model):
                     # M_t = Y .* ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
                     tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
                     tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
-                    M_t = tf.mul(Y, tmp2) # (?, L, k)
-                    alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2)) # (?, L)
-
+                    M_t = Y * tmp2  # (?, L, hidden_size)
                 else:
                     # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
                     tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
                     tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
-                    M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, k)
+                    M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, hidden_size)
 
-                    # alpha_t = softmax(w^T * M_t)
-                    tmp4 = tf.reduce_sum(M_t * w, 2) * mask1  # (?, L)
-                    alpha_t = tf.nn.softmax(tmp4)  # (?, L)
+                # alpha_t = softmax(w^T * M_t)
+                alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2) * mask1)  # (?, L)
 
                 # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
                 tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
@@ -307,9 +304,9 @@ class RNNModel(Model):
             U = tf.get_variable("U", shape=(self.config.hidden_size,), dtype=tf.float32, initializer=xavier_init)
             b = tf.Variable(initial_value=0.0, dtype=tf.float32)
 
-            last_h_a = self.add_asymmetric_prediction_op(x1, x2, self.mask1_placeholder)
+            last_h_a = self.add_asymmetric_prediction_op(x1, x2, self.seqlen1_placeholder, self.seqlen2_placeholder, self.mask1_placeholder)
             tf.get_variable_scope().reuse_variables()
-            last_h_b = self.add_asymmetric_prediction_op(x2, x1, self.mask2_placeholder)
+            last_h_b = self.add_asymmetric_prediction_op(x2, x1, self.seqlen2_placeholder, self.seqlen1_placeholder, self.mask2_placeholder)
 
             last_h = last_h_a + last_h_b
 
