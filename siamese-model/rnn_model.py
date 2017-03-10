@@ -42,7 +42,8 @@ class Config:
     n_classes = 2
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
-    hidden_size = 1000
+    hidden_size = 1200
+    second_hidden_size = None
     batch_size = 32
     n_epochs = 100
     max_grad_norm = 10.
@@ -59,7 +60,7 @@ class Config:
             # Where to save things.
             self.output_path = args.output_path
         else:
-            self.output_path = "results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
+            self.output_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+"/results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
         self.model_output = self.output_path + "model.weights"
         self.eval_output = self.output_path + "results.txt"
         self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
@@ -206,11 +207,15 @@ class RNNModel(Model):
 
         #U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
         xavier_init = tf.contrib.layers.xavier_initializer()
-        m = 50
-        U = tf.get_variable("U",initializer=xavier_init,  shape=[m, 1])
-        b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[])
-        b = tf.get_variable("b",initializer=xavier_init,  shape=[1, m])
-        W = tf.get_variable("W",initializer=xavier_init, shape=[self.config.hidden_size, m])
+        if self.config.second_hidden_size is None:
+            U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
+            b = tf.get_variable("b", initializer=xavier_init,  shape=[1,])
+        else:
+            m = self.config.second_hidden_size
+            U = tf.get_variable("U",initializer=xavier_init,  shape=[1, m])
+            b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[])
+            b = tf.get_variable("b",initializer=xavier_init,  shape=[1, m])
+            W = tf.get_variable("W",initializer=xavier_init, shape=[m, self.config.hidden_size])
         
         # Initialize state as vector of zeros.
         batch_size = tf.shape(x1)[0]
@@ -235,12 +240,16 @@ class RNNModel(Model):
             #     _, h2, c2 = cell2(x_t, h2, c2)
             h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
-        #preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
-        e1 = tf.matmul(h1_drop, W) + b
-        r1 = tf.nn.relu(e1)
-        e2 = tf.matmul(h2_drop, W) + b
-        r2 = tf.nn.relu(e2)
-        preds = tf.squeeze(tf.matmul(r1 * r2, U), 1) + b_u
+        if self.config.second_hidden_size is None:
+            preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
+
+        else:
+            e1 = tf.matmul(h1_drop, W) + b
+            r1 = tf.nn.relu(e1)
+            e2 = tf.matmul(h2_drop, W) + b
+            r2 = tf.nn.relu(e2)
+            preds = tf.squeeze(tf.matmul(U, r1*r2), 1) + b_u
+
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
         return preds
 
@@ -256,7 +265,7 @@ class RNNModel(Model):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=1.7))
+        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=1.675))
         return loss
 
     def add_training_op(self, loss):
@@ -324,7 +333,8 @@ class RNNModel(Model):
         p = correct_preds / total_preds if correct_preds > 0 else 0
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        return (p, r, f1, loss)
+        acc = sum(labels==preds) / float(len(labels))
+        return (acc, p, r, f1, loss)
 
     def consolidate_predictions(self, examples_raw, examples_processed, preds, logits):
         """Batch the predictions into groups of sentence length.
@@ -375,13 +385,14 @@ class RNNModel(Model):
         #token_cm, entity_scores = self.evaluate(sess, train_examples, train_examples_raw)
         #logger.debug("Token-level confusion matrix:\n" + token_cm.as_table())
         #logger.debug("Token-level scores:\n" + token_cm.summary())
-        #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         logger.info("Evaluating on development data")
 
 
         entity_scores = self.evaluate(sess, dev_processed, dev)
-        logger.info("P/R/F1: %.3f/%.3f/%.3f/%.4f", *entity_scores)
+        logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
+        with open(self.config.eval_output, 'a') as f:
+            f.write('%.4f %.4f %.3f %.3f %.3f %.3f\n' % (entity_scores[4], loss, entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
 
         f1 = entity_scores[-2]
         return f1

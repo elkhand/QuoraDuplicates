@@ -26,6 +26,9 @@ from defs import LBLS
 from rnn_model import RNNModel, Config, logger
 
 
+
+
+
 def do_train(args):
     # Set up some parameters.
     config = Config(args)
