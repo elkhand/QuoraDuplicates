@@ -146,7 +146,7 @@ class RNNModel(Model):
             embeddings: tf.Tensor of shape (None, max_length, n_features*embed_size)
         """
         if self.config.embeddings_trainable:
-            embeddings = tf.Variable(self.pretrained_embeddings)
+            embeddings = tf.Variable(self.pretrained_embeddings, name="embeddings")
         else:
             embeddings = self.pretrained_embeddings
 
@@ -287,7 +287,7 @@ class RNNModel(Model):
         Returns:
             train_op: The Op for training.
         """
-        global_step = tf.Variable(0, trainable=False)
+        global_step = tf.Variable(0, trainable=False, name="global_step")
         starter_learning_rate = self.config.lr
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
                                                    200000, self.config.lr_decay_rate, staircase=True)
