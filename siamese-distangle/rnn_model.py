@@ -42,8 +42,8 @@ class Config:
     n_classes = 2
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
-    hidden_size = 1200
-    second_hidden_size = None
+    hidden_size = 1000
+    second_hidden_size = 200
     batch_size = 32
     n_epochs = 100
     max_grad_norm = 10.
@@ -60,7 +60,7 @@ class Config:
             # Where to save things.
             self.output_path = args.output_path
         else:
-            self.output_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+"/results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
+            self.output_path = "results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
         self.model_output = self.output_path + "model.weights"
         self.eval_output = self.output_path + "results.txt"
         self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
@@ -146,7 +146,7 @@ class RNNModel(Model):
             embeddings: tf.Tensor of shape (None, max_length, n_features*embed_size)
         """
         if self.config.embeddings_trainable:
-            embeddings = tf.Variable(self.pretrained_embeddings, name="embeddings")
+            embeddings = tf.Variable(self.pretrained_embeddings)
         else:
             embeddings = self.pretrained_embeddings
 
@@ -207,16 +207,16 @@ class RNNModel(Model):
 
         #U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
         xavier_init = tf.contrib.layers.xavier_initializer()
-        if self.config.second_hidden_size is None:
-            U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
-            b = tf.get_variable("b", initializer=xavier_init,  shape=[1,])
-        else:
-            m = self.config.second_hidden_size
-            U = tf.get_variable("U",initializer=xavier_init,  shape=[1, m])
-            b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[])
-            b = tf.get_variable("b",initializer=xavier_init,  shape=[1, m])
-            W = tf.get_variable("W",initializer=xavier_init, shape=[m, self.config.hidden_size])
-        
+        m = self.config.second_hidden_size
+        U = tf.get_variable("U",initializer=xavier_init,  shape=[m, 1])
+        b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[])
+        b = tf.get_variable("b",initializer=xavier_init,  shape=[1, m])
+        W = tf.get_variable("W",initializer=xavier_init, shape=[self.config.hidden_size, m])
+
+        w_dist = tf.get_variable(initializer=xavier_init, shape=(1,))
+        w_angle = tf.get_variable(initializer=xavier_init, shape=(1,))
+
+
         # Initialize state as vector of zeros.
         batch_size = tf.shape(x1)[0]
         h1 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
@@ -240,15 +240,21 @@ class RNNModel(Model):
             #     _, h2, c2 = cell2(x_t, h2, c2)
             h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
-        if self.config.second_hidden_size is None:
-            preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
+        #preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
 
-        else:
-            e1 = tf.matmul(h1_drop, W) + b
-            r1 = tf.nn.relu(e1)
-            e2 = tf.matmul(h2_drop, W) + b
-            r2 = tf.nn.relu(e2)
-            preds = tf.squeeze(tf.matmul(U, r1*r2), 1) + b_u
+        # representation layer
+        # e1 = tf.matmul(h1_drop, W) + b
+        # r1 = tf.nn.relu(e1)
+        # e2 = tf.matmul(h2_drop, W) + b
+        # r2 = tf.nn.relu(e2)
+        #
+        # # distance, angle
+        # diff_12 = tf.sub(r1, r2)
+        # sqdiff_12 = tf.square(diff_12)
+        # sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
+        # angle_12 = tf.reduce_sum(tf.mul(r1, r2), 1)
+
+        preds = tf.squeeze(tf.matmul(h1_drop * h2_drop, U), 1) + b_u
 
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
         return preds
@@ -265,7 +271,7 @@ class RNNModel(Model):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=1.675))
+        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=1.7))
         return loss
 
     def add_training_op(self, loss):
@@ -287,7 +293,7 @@ class RNNModel(Model):
         Returns:
             train_op: The Op for training.
         """
-        global_step = tf.Variable(0, trainable=False, name="global_step")
+        global_step = tf.Variable(0, trainable=False)
         starter_learning_rate = self.config.lr
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
                                                    200000, self.config.lr_decay_rate, staircase=True)
@@ -385,14 +391,13 @@ class RNNModel(Model):
         #token_cm, entity_scores = self.evaluate(sess, train_examples, train_examples_raw)
         #logger.debug("Token-level confusion matrix:\n" + token_cm.as_table())
         #logger.debug("Token-level scores:\n" + token_cm.summary())
+        #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
         logger.info("Evaluating on development data")
 
 
         entity_scores = self.evaluate(sess, dev_processed, dev)
-        logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
-        with open(self.config.eval_output, 'a') as f:
-            f.write('%.4f %.4f %.3f %.3f %.3f %.3f\n' % (entity_scores[4], loss, entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
+        logger.info("P/R/F1: %.3f/%.3f/%.3f/%.4f", *entity_scores)
 
         f1 = entity_scores[-2]
         return f1

@@ -42,7 +42,7 @@ class Config:
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
     hidden_size = 200
-    batch_size = 32
+    batch_size = 100
     n_epochs = 100
     max_grad_norm = 10.
     lr = 0.0001
@@ -105,7 +105,7 @@ class RNNModel(Model):
         self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,))
         self.dropout_placeholder = tf.placeholder(tf.float32, [])
 
-    def create_feed_dict(self, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=None, dropout=1):
+    def create_feed_dict(self, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch=None, dropout=1):
         """Creates the feed_dict for the dependency parser.
 
         A feed_dict takes the form of:
@@ -360,10 +360,10 @@ class RNNModel(Model):
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
 
-    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
+    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch):
         inputs1_batch = np.array(inputs1_batch)
         inputs2_batch = np.array(inputs2_batch)
-        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch, labels_batch=labels_batch)
+        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch, featmask1_batch=featmask1_batch, featmask2_batch=featmask2_batch, labels_batch=labels_batch)
 
         logits, predictions, loss = sess.run([self.pred, self.predictions, self.loss], feed_dict=feed)
 
@@ -403,7 +403,7 @@ class RNNModel(Model):
         assert len(examples_raw) == len(examples_processed)
         assert len(examples_raw) == len(preds)
 
-        labels = [x[4] for x in examples_processed]
+        labels = [x[2] for x in examples_raw]
 
         return labels, preds, logits
 
@@ -427,8 +427,8 @@ class RNNModel(Model):
             prog.update(i + 1, [])
         return self.consolidate_predictions(inputs_raw, inputs, preds, logits), np.mean(loss_record)
 
-    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
-        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=labels_batch,
+    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, feat_mask1, feat_mask2, labels_batch):
+        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, feat_mask1, feat_mask2, labels_batch=labels_batch,
                                      dropout=Config.dropout)
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
@@ -533,22 +533,25 @@ def pad_sequences(data, max_length):
     # Use this zero vector when padding sequences.
     zero_vector = [0] * Config.n_features
 
-
     for sentence1, sentence2, label in data:
         feat_sent1 = zero_vector * max_length
         feat_sent2 = zero_vector * max_length
+        feat_mask1 = [False] * max_length
+        feat_mask2 = [False] * max_length
         for i, word in enumerate(sentence1):
             if i >= max_length:
                 break
             feat_sent1[i] = word
+            feat_mask1[i] = True
 
         for i, word in enumerate(sentence2):
             if i >= max_length:
                 break
             feat_sent2[i] = word
+            feat_mask2[i] = True
         seqlen1 = min(len(sentence1), max_length)
         seqlen2 = min(len(sentence2), max_length)
-        ret.append((feat_sent1, feat_sent2, seqlen1, seqlen2, label))
+        ret.append((feat_sent1, feat_sent2, seqlen1, seqlen2, feat_mask1, feat_mask2, label))
     return ret
 
 
