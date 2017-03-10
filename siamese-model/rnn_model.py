@@ -50,7 +50,7 @@ class Config:
     lr_decay_rate = 0.9
     embeddings_trainable = True
     pos_weight = 1.7
-
+    relu_size = 800
 
     def __init__(self, args):
         self.cell = "lstm"
@@ -206,11 +206,11 @@ class RNNModel(Model):
 
         #U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
         xavier_init = tf.contrib.layers.xavier_initializer()
-        m = 50
-        U = tf.get_variable("U",initializer=xavier_init,  shape=[m, 1])
+
+        U = tf.get_variable("U",initializer=xavier_init,  shape=[relu_size, 1])
         b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[])
-        b = tf.get_variable("b",initializer=xavier_init,  shape=[1, m])
-        W = tf.get_variable("W",initializer=xavier_init, shape=[self.config.hidden_size, m])
+        b = tf.get_variable("b",initializer=xavier_init,  shape=[1, relu_size])
+        W = tf.get_variable("W",initializer=xavier_init, shape=[self.config.hidden_size, relu_size])
         
         # Initialize state as vector of zeros.
         batch_size = tf.shape(x1)[0]
