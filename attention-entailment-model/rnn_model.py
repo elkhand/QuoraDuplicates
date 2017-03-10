@@ -155,7 +155,7 @@ class RNNModel(Model):
             embeddings: tf.Tensor of shape (None, max_length, n_features*embed_size)
         """
         if self.config.embeddings_trainable:
-            embeddings = tf.Variable(self.pretrained_embeddings)
+            embeddings = tf.Variable(self.pretrained_embeddings, name="embeddings")
         else:
             embeddings = self.pretrained_embeddings
 
@@ -302,7 +302,7 @@ class RNNModel(Model):
             # Define U and b as variables.
             xavier_init = tf.contrib.layers.xavier_initializer()
             U = tf.get_variable("U", shape=(self.config.hidden_size,), dtype=tf.float32, initializer=xavier_init)
-            b = tf.Variable(initial_value=0.0, dtype=tf.float32)
+            b = tf.Variable(initial_value=0.0, dtype=tf.float32, name="b")
 
             last_h_a = self.add_asymmetric_prediction_op(x1, x2, self.seqlen1_placeholder, self.seqlen2_placeholder, self.mask1_placeholder)
             tf.get_variable_scope().reuse_variables()
@@ -349,7 +349,7 @@ class RNNModel(Model):
         """
         # Optimizer: set up a variable that's incremented once per batch and
         # controls the learning rate decay.
-        global_step = tf.Variable(0, trainable=False)
+        global_step = tf.Variable(0, trainable=False, name="global_step")
         starter_learning_rate = self.config.lr
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
                                                    200000, self.config.lr_decay_rate, staircase=True)
