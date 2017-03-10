@@ -11,10 +11,10 @@ import time
 toEmail= sys.argv[1]
 recipients = [toEmail]
 emaillist = recipients
-
+now = datetime.datetime.now()
 while(True):
     msg = MIMEMultipart()
-    msg['Subject'] = sys.argv[3]
+    msg['Subject'] = "CS224N Final Project Experiment "+str(now)
     fromEmail = 'cs224ndlnlp@gmail.com'
     msg['From'] = fromEmail
     msg['Reply-to'] = 'cs224ndlnlp@gmail.com'
