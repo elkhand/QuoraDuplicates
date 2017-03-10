@@ -6,15 +6,16 @@ from smtplib import SMTP
 import smtplib
 import sys
 import time
+import datetime
 
-#['elkhan.dadashov@gmail.com'] 
+#['elkhan.dadashov@gmail.com']
 toEmail= sys.argv[1]
 recipients = [toEmail]
 emaillist = recipients
-
+now = datetime.datetime.now()
 while(True):
     msg = MIMEMultipart()
-    msg['Subject'] = sys.argv[3]#"CS224N Final Project Experiment"
+    msg['Subject'] = "CS224N Final Project Experiment "+str(now)
     fromEmail = 'cs224ndlnlp@gmail.com'
     msg['From'] = fromEmail
     msg['Reply-to'] = 'cs224ndlnlp@gmail.com'
