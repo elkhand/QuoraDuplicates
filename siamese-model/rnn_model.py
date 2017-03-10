@@ -204,14 +204,20 @@ class RNNModel(Model):
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
-        U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
-        b = tf.Variable(initial_value=np.zeros((1,)), dtype=tf.float32)
-
+        #U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
+        xavier_init = tf.contrib.layers.xavier_initializer()
+        m = 50
+        U = tf.get_variable("U",initializer=xavier_init,  shape=[m, 1])
+        b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[])
+        b = tf.get_variable("b",initializer=xavier_init,  shape=[1, m])
+        W = tf.get_variable("W",initializer=xavier_init, shape=[self.config.hidden_size, m])
+        
         # Initialize state as vector of zeros.
-        h1 = tf.fill([tf.shape(x1)[0], self.config.hidden_size], 0.0)
-        c1 = tf.fill([tf.shape(x1)[0], self.config.hidden_size], 0.0)
-        h2 = tf.fill([tf.shape(x2)[0], self.config.hidden_size], 0.0)
-        c2 = tf.fill([tf.shape(x2)[0], self.config.hidden_size], 0.0)
+        batch_size = tf.shape(x1)[0]
+        h1 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
+        c1 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
+        h2 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
+        c2 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
         with tf.variable_scope("LSTM"):
             Y, (c1, h1) = tf.nn.dynamic_rnn(cell, x1, initial_state=LSTMStateTuple(c1, h1), sequence_length=self.seqlen1_placeholder)
             # for time_step in range(self.max_length):
@@ -229,8 +235,12 @@ class RNNModel(Model):
             #     _, h2, c2 = cell2(x_t, h2, c2)
             h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
-        preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
-
+        #preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
+        e1 = tf.matmul(h1_drop, W) + b
+        r1 = tf.nn.relu(e1)
+        e2 = tf.matmul(h2_drop, W) + b
+        r2 = tf.nn.relu(e2)
+        preds = tf.squeeze(tf.matmul(r1 * r2, U), 1) + b_u
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
         return preds
 
