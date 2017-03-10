@@ -42,7 +42,7 @@ class Config:
     dropout = 0.95
     embed_size = 100 # todo: make depend on input
     hidden_size = 200
-    batch_size = 32
+    batch_size = 100
     n_epochs = 100
     max_grad_norm = 10.
     lr = 0.0001
@@ -100,10 +100,12 @@ class RNNModel(Model):
         self.input2_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.seqlen1_placeholder = tf.placeholder(tf.int32, (None,))
         self.seqlen2_placeholder = tf.placeholder(tf.int32, (None,))
+        self.mask1_placeholder = tf.placeholder(tf.float32, (None, self.max_length))
+        self.mask2_placeholder = tf.placeholder(tf.float32, (None, self.max_length))
         self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,))
         self.dropout_placeholder = tf.placeholder(tf.float32, [])
 
-    def create_feed_dict(self, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=None, dropout=1):
+    def create_feed_dict(self, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch=None, dropout=1):
         """Creates the feed_dict for the dependency parser.
 
         A feed_dict takes the form of:
@@ -121,13 +123,19 @@ class RNNModel(Model):
         Returns:
             feed_dict: The feed dictionary mapping from placeholders to values.
         """
+
+        max_length = self.config.max_length
+        mask1_batch = [([1.0] * seqlen) + ([0.0] * (max_length - seqlen)) for seqlen in seqlen1_batch]
+        mask2_batch = [([1.0] * seqlen) + ([0.0] * (max_length - seqlen)) for seqlen in seqlen2_batch]
+
         feed_dict = {
             self.input1_placeholder: inputs1_batch,
             self.input2_placeholder: inputs2_batch,
             self.seqlen1_placeholder: seqlen1_batch,
             self.seqlen2_placeholder: seqlen2_batch,
+            self.mask1_placeholder: mask1_batch,
+            self.mask2_placeholder: mask2_batch,
             self.dropout_placeholder: dropout
-
         }
         if labels_batch is not None:
             feed_dict.update({self.labels_placeholder: np.array(labels_batch, dtype=np.float32)})
@@ -147,7 +155,7 @@ class RNNModel(Model):
             embeddings: tf.Tensor of shape (None, max_length, n_features*embed_size)
         """
         if self.config.embeddings_trainable:
-            embeddings = tf.Variable(self.pretrained_embeddings)
+            embeddings = tf.Variable(self.pretrained_embeddings, name="embeddings")
         else:
             embeddings = self.pretrained_embeddings
 
@@ -158,7 +166,7 @@ class RNNModel(Model):
         embeddings = tf.reshape(to_concat, [-1, self.config.max_length, self.config.n_features* self.config.embed_size])
         return embeddings
 
-    def add_asymmetric_prediction_op(self, x1, x2):
+    def add_asymmetric_prediction_op(self, x1, x2, seqlen1, seqlen2, mask1):
         """Adds the unrolled RNN:
             h_0 = 0
             for t in 1 to T:
@@ -215,7 +223,7 @@ class RNNModel(Model):
         h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
         with tf.variable_scope("LSTM1"):
-            Y, (c, h) = tf.nn.dynamic_rnn(cell1, x1, initial_state=LSTMStateTuple(c, h))#, sequence_length=self.seqlen1_placeholder
+            Y, (c, h) = tf.nn.dynamic_rnn(cell1, x1, initial_state=LSTMStateTuple(c, h), sequence_length=seqlen1)
             # for time_step in range(self.max_length):
             #     x_t = x1[:, time_step, :]
             #     _, h, c = cell1(x_t, h, c)
@@ -227,7 +235,7 @@ class RNNModel(Model):
         h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
 
         with tf.variable_scope("LSTM2"):
-            Y2, (c, h) = tf.nn.dynamic_rnn(cell2, x2, initial_state=LSTMStateTuple(c, h))#, sequence_length=self.seqlen2_placeholder
+            Y2, (c, h) = tf.nn.dynamic_rnn(cell2, x2, initial_state=LSTMStateTuple(c, h), sequence_length=seqlen2)
             # for time_step in range(self.max_length):
             #     x_t = x2[:, time_step, :]
             #     _, h, c = cell2(x_t, h, c)
@@ -266,17 +274,15 @@ class RNNModel(Model):
                     # M_t = Y .* ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
                     tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
                     tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
-                    M_t = tf.mul(Y, tmp2) # (?, L, k)
-                    alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2)) # (?, L)
-
+                    M_t = Y * tmp2  # (?, L, hidden_size)
                 else:
                     # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
                     tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
                     tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
-                    M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, k)
+                    M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, hidden_size)
 
-                    # alpha_t = softmax(w^T * M_t)
-                    alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2))  # (?, L)
+                # alpha_t = softmax(w^T * M_t)
+                alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2) * mask1)  # (?, L)
 
                 # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
                 tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
@@ -296,11 +302,11 @@ class RNNModel(Model):
             # Define U and b as variables.
             xavier_init = tf.contrib.layers.xavier_initializer()
             U = tf.get_variable("U", shape=(self.config.hidden_size,), dtype=tf.float32, initializer=xavier_init)
-            b = tf.Variable(initial_value=0.0, dtype=tf.float32)
+            b = tf.Variable(initial_value=0.0, dtype=tf.float32, name="b")
 
-            last_h_a = self.add_asymmetric_prediction_op(x1, x2)
+            last_h_a = self.add_asymmetric_prediction_op(x1, x2, self.seqlen1_placeholder, self.seqlen2_placeholder, self.mask1_placeholder)
             tf.get_variable_scope().reuse_variables()
-            last_h_b = self.add_asymmetric_prediction_op(x2, x1)
+            last_h_b = self.add_asymmetric_prediction_op(x2, x1, self.seqlen2_placeholder, self.seqlen1_placeholder, self.mask2_placeholder)
 
             last_h = last_h_a + last_h_b
 
@@ -343,7 +349,7 @@ class RNNModel(Model):
         """
         # Optimizer: set up a variable that's incremented once per batch and
         # controls the learning rate decay.
-        global_step = tf.Variable(0, trainable=False)
+        global_step = tf.Variable(0, trainable=False, name="global_step")
         starter_learning_rate = self.config.lr
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
                                                    200000, self.config.lr_decay_rate, staircase=True)
@@ -354,10 +360,10 @@ class RNNModel(Model):
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
 
-    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
+    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch):
         inputs1_batch = np.array(inputs1_batch)
         inputs2_batch = np.array(inputs2_batch)
-        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch, labels_batch=labels_batch)
+        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch, featmask1_batch=featmask1_batch, featmask2_batch=featmask2_batch, labels_batch=labels_batch)
 
         logits, predictions, loss = sess.run([self.pred, self.predictions, self.loss], feed_dict=feed)
 
@@ -397,7 +403,7 @@ class RNNModel(Model):
         assert len(examples_raw) == len(examples_processed)
         assert len(examples_raw) == len(preds)
 
-        labels = [x[4] for x in examples_processed]
+        labels = [x[2] for x in examples_raw]
 
         return labels, preds, logits
 
@@ -421,8 +427,8 @@ class RNNModel(Model):
             prog.update(i + 1, [])
         return self.consolidate_predictions(inputs_raw, inputs, preds, logits), np.mean(loss_record)
 
-    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
-        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=labels_batch,
+    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, feat_mask1, feat_mask2, labels_batch):
+        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, feat_mask1, feat_mask2, labels_batch=labels_batch,
                                      dropout=Config.dropout)
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
@@ -527,22 +533,25 @@ def pad_sequences(data, max_length):
     # Use this zero vector when padding sequences.
     zero_vector = [0] * Config.n_features
 
-
     for sentence1, sentence2, label in data:
         feat_sent1 = zero_vector * max_length
         feat_sent2 = zero_vector * max_length
+        feat_mask1 = [False] * max_length
+        feat_mask2 = [False] * max_length
         for i, word in enumerate(sentence1):
             if i >= max_length:
                 break
             feat_sent1[i] = word
+            feat_mask1[i] = True
 
         for i, word in enumerate(sentence2):
             if i >= max_length:
                 break
             feat_sent2[i] = word
+            feat_mask2[i] = True
         seqlen1 = min(len(sentence1), max_length)
         seqlen2 = min(len(sentence2), max_length)
-        ret.append((feat_sent1, feat_sent2, seqlen1, seqlen2, label))
+        ret.append((feat_sent1, feat_sent2, seqlen1, seqlen2, feat_mask1, feat_mask2, label))
     return ret
 
 
