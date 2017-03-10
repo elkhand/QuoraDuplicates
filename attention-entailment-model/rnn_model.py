@@ -124,13 +124,13 @@ class RNNModel(Model):
         feed_dict = {
             self.input1_placeholder: inputs1_batch,
             self.input2_placeholder: inputs2_batch,
-            self.seqlen1_placeholder : seqlen1_batch,
-            self.seqlen2_placeholder : seqlen2_batch,
+            self.seqlen1_placeholder: seqlen1_batch,
+            self.seqlen2_placeholder: seqlen2_batch,
             self.dropout_placeholder: dropout
 
         }
         if labels_batch is not None:
-            feed_dict.update({self.labels_placeholder: labels_batch})
+            feed_dict.update({self.labels_placeholder: np.array(labels_batch, dtype=np.float32)})
         return feed_dict
 
     def add_embedding(self, ind):
@@ -354,14 +354,14 @@ class RNNModel(Model):
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
 
-    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch):
+    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
         inputs1_batch = np.array(inputs1_batch)
         inputs2_batch = np.array(inputs2_batch)
-        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch)
+        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch, labels_batch=labels_batch)
 
-        predictions = sess.run(self.predictions, feed_dict=feed)
+        logits, predictions, loss = sess.run([self.pred, self.predictions, self.loss], feed_dict=feed)
 
-        return predictions
+        return logits, predictions, loss
 
     def evaluate(self, sess, examples, examples_raw):
         """Evaluates model performance on @examples.
@@ -376,11 +376,9 @@ class RNNModel(Model):
             The F1 score for predicting tokens as named entities.
         """
 
-        labels, preds = self.output(sess, examples_raw, examples) #*
-        labels, preds = np.array(labels), np.array(preds)
 
-        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(labels, preds, pos_weight=self.config.pos_weight))
-
+        (labels, preds, logits), loss = self.output(sess, examples_raw, examples) #*
+        labels, preds, logits = np.array(labels, dtype=np.float32), np.array(preds), np.array(logits)
 
         correct_preds = np.logical_and(labels==1, preds==1).sum()
         total_preds = float(np.sum(preds==1))
@@ -393,7 +391,7 @@ class RNNModel(Model):
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
         return (p, r, f1, loss)
 
-    def consolidate_predictions(self, examples_raw, examples_processed, preds):
+    def consolidate_predictions(self, examples_raw, examples_processed, preds, logits):
         """Batch the predictions into groups of sentence length.
         """
         assert len(examples_raw) == len(examples_processed)
@@ -401,7 +399,7 @@ class RNNModel(Model):
 
         labels = [x[4] for x in examples_processed]
 
-        return labels, preds
+        return labels, preds, logits
 
     def output(self, sess, inputs_raw, inputs):
         """
@@ -411,13 +409,17 @@ class RNNModel(Model):
             inputs = self.preprocess_sequence_data(self.helper.vectorize(inputs_raw))
 
         preds = []
+        logits = []
+        loss_record = []
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
         for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
-            batch = batch[:4] # ignore label
-            preds_ = self.predict_on_batch(sess, *batch)
+            # batch = batch[:4] # ignore label
+            logits_, preds_, loss_ = self.predict_on_batch(sess, *batch)
             preds += list(preds_)
+            logits += list(logits_)
+            loss_record.append(loss_)
             prog.update(i + 1, [])
-        return self.consolidate_predictions(inputs_raw, inputs, preds)
+        return self.consolidate_predictions(inputs_raw, inputs, preds, logits), np.mean(loss_record)
 
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
         feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=labels_batch,
@@ -443,7 +445,7 @@ class RNNModel(Model):
         entity_scores = self.evaluate(sess, dev_processed, dev)
         logger.info("P/R/F1: %.3f/%.3f/%.3f/%.4f", *entity_scores)
 
-        f1 = entity_scores[-1]
+        f1 = entity_scores[-2]
         return f1
 
     def fit(self, sess, saver, train, dev):
