@@ -33,6 +33,14 @@ python siamese-model/run.py train \
 -vv data/glwordvectors_1_100.txt
 ```
 
+Running sendEmail script:
+
+```
+python sendEmail.py elkhan.dadashov@gmail.com /home/elkhand/QuoraDuplicates/exp_march9_relu_pred.txt
+
+python sendEmail.py <your_email> <path_to_file_to_be_attached_to_email>
+```
+
 
 ## You can download data from this link:
 
