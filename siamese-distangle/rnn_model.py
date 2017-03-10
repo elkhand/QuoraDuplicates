@@ -243,18 +243,18 @@ class RNNModel(Model):
         #preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
 
         # representation layer
-        e1 = tf.matmul(h1_drop, W) + b
-        r1 = tf.nn.relu(e1)
-        e2 = tf.matmul(h2_drop, W) + b
-        r2 = tf.nn.relu(e2)
+        # e1 = tf.matmul(h1_drop, W) + b
+        # r1 = tf.nn.relu(e1)
+        # e2 = tf.matmul(h2_drop, W) + b
+        # r2 = tf.nn.relu(e2)
+        #
+        # # distance, angle
+        # diff_12 = tf.sub(r1, r2)
+        # sqdiff_12 = tf.square(diff_12)
+        # sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
+        # angle_12 = tf.reduce_sum(tf.mul(r1, r2), 1)
 
-        # distance, angle
-        diff_12 = tf.sub(r1, r2)
-        sqdiff_12 = tf.square(diff_12)
-        sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
-        angle_12 = tf.reduce_sum(tf.mul(r1, r2), 1)
-
-        preds = tf.squeeze(tf.matmul(r1 * r2, U), 1) + w_dist*sqdist_12 + w_angle*angle_12 + b_u
+        preds = tf.squeeze(tf.matmul(h1_drop * h2_drop, U), 1) + b_u
 
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
         return preds
@@ -339,7 +339,8 @@ class RNNModel(Model):
         p = correct_preds / total_preds if correct_preds > 0 else 0
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        return (p, r, f1, loss)
+        acc = sum(labels==preds) / float(len(labels))
+        return (acc, p, r, f1, loss)
 
     def consolidate_predictions(self, examples_raw, examples_processed, preds, logits):
         """Batch the predictions into groups of sentence length.

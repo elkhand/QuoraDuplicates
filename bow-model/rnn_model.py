@@ -16,7 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lstm_cell import LSTMCell
 from q3_gru_cell import GRUCell
 
-from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
+from data_util import *
 
 from util import ConfusionMatrix, Progbar, minibatches
 from data_util import get_chunks
@@ -40,8 +40,8 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 35 # longest sequence to parse
     n_classes = 2
-    dropout = 0.95
-    embed_size = 100 # todo: make depend on input
+    dropout = 0.85
+    embed_size = 300 # todo: make depend on input
     hidden_size = 1000
     second_hidden_size = None
     batch_size = 100
@@ -52,7 +52,6 @@ class Config:
     embeddings_trainable = True
     pos_weight = 1.7
 
-
     def __init__(self, args):
         self.cell = "lstm"
 
@@ -60,7 +59,7 @@ class Config:
             # Where to save things.
             self.output_path = args.output_path
         else:
-            self.output_path = "results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
+            self.output_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+"/results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
         self.model_output = self.output_path + "model.weights"
         self.eval_output = self.output_path + "results.txt"
         self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
@@ -199,25 +198,38 @@ class RNNModel(Model):
         x2 = self.add_embedding(2) * tf.expand_dims(self.featmask2_placeholder, 2)
         dropout_rate = self.dropout_placeholder
 
-        # bag of words sum over embeddings
-        z1 = tf.reduce_sum(x1, 1) # (?, embed_size)
-        z2 = tf.reduce_sum(x2, 1)
+        # bag of words mean and max over embeddings
+        z1 = tf.reduce_sum(x1, 1) / tf.expand_dims(tf.reduce_sum(self.featmask1_placeholder, 1), 1) # (?, embed_size)
+        z2 = tf.reduce_sum(x2, 1) / tf.expand_dims(tf.reduce_sum(self.featmask1_placeholder, 1), 1)
+        x1 = tf.reduce_max(x1, 1)
+        x2 = tf.reduce_max(x2, 1)
 
         # initialize variables
         xavier_init = tf.contrib.layers.xavier_initializer()
-        W = tf.get_variable("W", initializer=xavier_init, shape=[self.config.n_features* self.config.embed_size, self.config.hidden_size])
+        W1 = tf.get_variable("W1", initializer=xavier_init, shape=[self.config.n_features* self.config.embed_size, self.config.hidden_size])
         b1 = tf.get_variable("b1", initializer=xavier_init, shape=[self.config.hidden_size,])
-        U = tf.get_variable("U", initializer=np.ones((1, self.config.hidden_size), dtype=np.float32), dtype=tf.float32)
-        b2 = tf.get_variable("b2", initializer=xavier_init,  shape=[1,])
+        W2 = tf.get_variable("W2", initializer=xavier_init, shape=[self.config.n_features* self.config.embed_size, self.config.hidden_size])
+        b = tf.get_variable("b2", initializer=xavier_init,  shape=[1,])
 
         # relu, dropout
-        h1 = tf.nn.relu(tf.matmul(z1, W) + b1)
-        h2 = tf.nn.relu(tf.matmul(z2, W) + b1)
-        h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
-        h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
+        h1 = tf.nn.relu(tf.matmul(z1, W1) + tf.matmul(x1, W2) + b1)
+        h2 = tf.nn.relu(tf.matmul(z2, W1) + tf.matmul(x2, W2) + b1)
 
-        # preds
-        preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b2
+        if self.config.second_hidden_size is not None:
+            U = tf.get_variable("U", initializer=np.ones((1, self.config.second_hidden_size), dtype=np.float32), dtype=tf.float32)
+            W3 = tf.get_variable("W3", initializer=xavier_init, shape=[self.config.hidden_size, self.config.second_hidden_size])
+            b3 = tf.get_variable("b3", initializer=xavier_init, shape=[self.config.second_hidden_size,])
+            r1 = tf.nn.relu(tf.matmul(h1, W3) + b3)
+            r2 = tf.nn.relu(tf.matmul(h2, W3) + b3)
+            r1_drop = tf.nn.dropout(r1, keep_prob=dropout_rate)
+            r2_drop = tf.nn.dropout(r2, keep_prob=dropout_rate)
+            preds = tf.reduce_sum(U * r1_drop * r2_drop, 1) + b
+
+        else:
+            U = tf.get_variable("U", initializer=np.ones((1, self.config.hidden_size), dtype=np.float32), dtype=tf.float32)
+            h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
+            h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
+            preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
 
         return preds
 
@@ -233,7 +245,7 @@ class RNNModel(Model):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=1.7))
+        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=self.config.pos_weight))
         return loss
 
     def add_training_op(self, loss):
@@ -301,7 +313,9 @@ class RNNModel(Model):
         p = correct_preds / total_preds if correct_preds > 0 else 0
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        return (p, r, f1, loss)
+        acc = sum(labels==preds) / float(len(labels))
+
+        return (acc, p, r, f1, loss)
 
     def consolidate_predictions(self, examples_raw, examples_processed, preds, logits):
         """Batch the predictions into groups of sentence length.
@@ -358,7 +372,10 @@ class RNNModel(Model):
 
 
         entity_scores = self.evaluate(sess, dev_processed, dev)
-        logger.info("P/R/F1: %.3f/%.3f/%.3f/%.4f", *entity_scores)
+        logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
+        with open(self.config.eval_output, 'a') as f:
+            f.write('%.4f %.4f %.3f %.3f %.3f %.3f\n' % (entity_scores[4], loss, entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
+
 
         f1 = entity_scores[-2]
         return f1
