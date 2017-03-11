@@ -40,18 +40,19 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 35 # longest sequence to parse
     n_classes = 2
-    dropout = 0.95
+    dropout = 0.9
     embed_size = 100 # todo: make depend on input
-    hidden_size = 1200
+    hidden_size = 1100
     second_hidden_size = None
-    batch_size = 32
+    batch_size = 100
     n_epochs = 100
     max_grad_norm = 10.
     lr = 0.0003
     lr_decay_rate = 0.9
     embeddings_trainable = True
     pos_weight = 1.7
-
+    bidirectional = False
+    add_distance = False
 
     def __init__(self, args):
         self.cell = "lstm"
@@ -200,10 +201,13 @@ class RNNModel(Model):
 
         if self.config.cell == "lstm":
             cell = BasicLSTMCell(Config.hidden_size)
+            cell = tf.nn.rnn_cell.DropoutWrapper(cell, dropout_rate)
         elif self.config.cell1 == "gru":
             cell = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
+        if self.config.bidirectional:
+            cell2 = BasicLSTMCell(Config.hidden_size)
 
         #U = tf.Variable(initial_value=np.ones((1, self.config.hidden_size)), dtype=tf.float32)
         xavier_init = tf.contrib.layers.xavier_initializer()
@@ -216,7 +220,9 @@ class RNNModel(Model):
             b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[])
             b = tf.get_variable("b",initializer=xavier_init,  shape=[1, m])
             W = tf.get_variable("W",initializer=xavier_init, shape=[m, self.config.hidden_size])
-        
+        if self.config.add_distance:
+            a = tf.Variable(initial_value=np.ones((1,), dtype=np.float32), dtype=tf.float32)
+
         # Initialize state as vector of zeros.
         batch_size = tf.shape(x1)[0]
         h1 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
@@ -224,7 +230,12 @@ class RNNModel(Model):
         h2 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
         c2 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
         with tf.variable_scope("LSTM"):
-            Y, (c1, h1) = tf.nn.dynamic_rnn(cell, x1, initial_state=LSTMStateTuple(c1, h1), sequence_length=self.seqlen1_placeholder)
+            if self.config.bidirectional:
+                (Y_fw, Y_bw), ((c1_fw, h1_fw), (c1_bw, h1_bw)) = tf.nn.bidirectional_dynamic_rnn(cell, cell2, x1, initial_state_fw=LSTMStateTuple(c1, h1), initial_state_bw=LSTMStateTuple(c1, h1),
+                                                          sequence_length=self.seqlen1_placeholder)
+            else:
+                Y, (c1, h1) = tf.nn.dynamic_rnn(cell, x1, initial_state=LSTMStateTuple(c1, h1), sequence_length=self.seqlen1_placeholder)
+
             # for time_step in range(self.max_length):
             #     x_t = x1[:, time_step, :]
             #     _, h1, c1 = cell1(x_t, h1, c1)
@@ -234,14 +245,28 @@ class RNNModel(Model):
 
             tf.get_variable_scope().reuse_variables()
 
-            Y, (c2, h2) = tf.nn.dynamic_rnn(cell, x2, initial_state=LSTMStateTuple(c2, h2), sequence_length=self.seqlen2_placeholder)
+            if self.config.bidirectional:
+                Y, (c2, h2) = tf.nn.bidirectional_dynamic_rnn(cell, cell2, x2, initial_state_fw=LSTMStateTuple(c2, h2), initial_state_bw=LSTMStateTuple(c2, h2),
+                                                          sequence_length=self.seqlen2_placeholder)
+            else:
+                Y, (c2, h2) = tf.nn.dynamic_rnn(cell, x2, initial_state=LSTMStateTuple(c2, h2), sequence_length=self.seqlen2_placeholder)
+
             # for time_step in range(self.max_length):
             #     x_t = x2[:, time_step, :]
             #     _, h2, c2 = cell2(x_t, h2, c2)
             h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
         if self.config.second_hidden_size is None:
-            preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
+
+            if self.config.add_distance:
+                diff_12 = tf.sub(h1_drop, h2_drop)
+                sqdiff_12 = tf.square(diff_12)
+                sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
+                inner_12 = tf.reduce_sum(U * h1 * h2, 1)
+                # inner_dist_12 = tf.reduce_sum(U2 * h1_drop * h2_drop, 1)
+                preds = inner_12 + a * sqdist_12 + b
+            else:
+                preds = tf.reduce_sum(U * h1 * h2, 1) + b
 
         else:
             e1 = tf.matmul(h1_drop, W) + b
@@ -292,7 +317,10 @@ class RNNModel(Model):
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
                                                    200000, self.config.lr_decay_rate, staircase=True)
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-        train_op = optimizer.minimize(loss, global_step=global_step)
+        grads_and_vars = optimizer.compute_gradients(loss)
+        grads, grad_vars = zip(*grads_and_vars)
+        grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.config.max_grad_norm)
+        train_op = optimizer.apply_gradients(zip(grads, grad_vars))
         return train_op
 
     def preprocess_sequence_data(self, examples):
@@ -381,18 +409,17 @@ class RNNModel(Model):
             if self.report: self.report.log_train_loss(loss)
         print("")
 
-        #logger.info("Evaluating on training data")
-        #token_cm, entity_scores = self.evaluate(sess, train_examples, train_examples_raw)
-        #logger.debug("Token-level confusion matrix:\n" + token_cm.as_table())
-        #logger.debug("Token-level scores:\n" + token_cm.summary())
+        logger.info("Evaluating on training data: 10k sample")
+        n_train_evaluate = 10000
+        train_entity_scores = self.evaluate(sess, train_processed[:n_train_evaluate], train[:n_train_evaluate])
+        logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *train_entity_scores)
 
         logger.info("Evaluating on development data")
-
-
         entity_scores = self.evaluate(sess, dev_processed, dev)
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
+
         with open(self.config.eval_output, 'a') as f:
-            f.write('%.4f %.4f %.3f %.3f %.3f %.3f\n' % (entity_scores[4], loss, entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
+            f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
 
         f1 = entity_scores[-2]
         return f1

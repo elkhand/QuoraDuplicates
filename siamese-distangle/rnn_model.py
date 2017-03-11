@@ -51,6 +51,7 @@ class Config:
     lr_decay_rate = 0.9
     embeddings_trainable = True
     pos_weight = 1.7
+    add_distance = True
 
 
     def __init__(self, args):

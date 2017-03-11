@@ -40,8 +40,8 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 35 # longest sequence to parse
     n_classes = 2
-    dropout = 0.85
-    embed_size = 300 # todo: make depend on input
+    dropout = 0.8
+    embed_size = 100 # todo: make depend on input
     hidden_size = 1000
     second_hidden_size = None
     batch_size = 100
@@ -51,6 +51,7 @@ class Config:
     lr_decay_rate = 0.9
     embeddings_trainable = True
     pos_weight = 1.7
+    add_distance = True
 
     def __init__(self, args):
         self.cell = "lstm"
@@ -216,7 +217,7 @@ class RNNModel(Model):
         h2 = tf.nn.relu(tf.matmul(z2, W1) + tf.matmul(x2, W2) + b1)
 
         if self.config.second_hidden_size is not None:
-            U = tf.get_variable("U", initializer=np.ones((1, self.config.second_hidden_size), dtype=np.float32), dtype=tf.float32)
+            U = tf.get_variable("U", shape = (1, self.config.second_hidden_size), initializer=xavier_init, dtype=tf.float32)
             W3 = tf.get_variable("W3", initializer=xavier_init, shape=[self.config.hidden_size, self.config.second_hidden_size])
             b3 = tf.get_variable("b3", initializer=xavier_init, shape=[self.config.second_hidden_size,])
             r1 = tf.nn.relu(tf.matmul(h1, W3) + b3)
@@ -226,10 +227,20 @@ class RNNModel(Model):
             preds = tf.reduce_sum(U * r1_drop * r2_drop, 1) + b
 
         else:
-            U = tf.get_variable("U", initializer=np.ones((1, self.config.hidden_size), dtype=np.float32), dtype=tf.float32)
+            U = tf.get_variable("U", shape=(1, self.config.hidden_size), initializer=xavier_init, dtype=tf.float32)
             h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
             h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
-            preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
+            if self.config.add_distance:
+                # U2 = tf.get_variable("U2", shape=(1, self.config.hidden_size), initializer=xavier_init, dtype=tf.float32)
+                a = tf.get_variable("a", initializer=xavier_init, shape=[1,])
+                diff_12 = tf.sub(h1, h2)
+                sqdiff_12 = tf.square(diff_12)
+                sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
+                inner_12 = tf.reduce_sum(U * h1_drop * h2_drop, 1)
+                # inner_dist_12 = tf.reduce_sum(U2 * h1_drop * h2_drop, 1)
+                preds = inner_12 +  a * sqdist_12 + b
+            else:
+                preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
 
         return preds
 
@@ -362,19 +373,16 @@ class RNNModel(Model):
             if self.report: self.report.log_train_loss(loss)
         print("")
 
-        #logger.info("Evaluating on training data")
-        #token_cm, entity_scores = self.evaluate(sess, train_examples, train_examples_raw)
-        #logger.debug("Token-level confusion matrix:\n" + token_cm.as_table())
-        #logger.debug("Token-level scores:\n" + token_cm.summary())
-        #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
+        logger.info("Evaluating on training data: 10k sample")
+        n_train_evaluate = 10000
+        train_entity_scores = self.evaluate(sess, train_processed[:n_train_evaluate], train[:n_train_evaluate])
+        logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *train_entity_scores)
 
         logger.info("Evaluating on development data")
-
-
         entity_scores = self.evaluate(sess, dev_processed, dev)
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
         with open(self.config.eval_output, 'a') as f:
-            f.write('%.4f %.4f %.3f %.3f %.3f %.3f\n' % (entity_scores[4], loss, entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
+            f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
 
 
         f1 = entity_scores[-2]

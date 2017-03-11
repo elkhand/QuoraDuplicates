@@ -20,7 +20,7 @@ import numpy as np
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from util import print_sentence, write_conll, read_dat
+from util import *
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
 from defs import LBLS
 from rnn_model import RNNModel, Config, logger
@@ -70,10 +70,17 @@ def do_train(args):
                     for sentence, labels, predictions in output:
                         print_sentence(f, sentence, labels, predictions)
 
+
 def do_evaluate(args):
+
     config = Config(args.model_path)
     helper = ModelHelper.load(args.model_path)
-    input_data = read_conll(args.data)
+    dev_q1 = read_dat(args.data_dev1)
+    dev_q2 = read_dat(args.data_dev2)
+    dev_lab = read_lab(args.data_dev_labels)
+    dev_dat1   = helper.vectorize(dev_q1)
+    dev_dat2   = helper.vectorize(dev_q2)
+
     embeddings = load_embeddings(args, helper)
     config.embed_size = embeddings.shape[1]
 
@@ -90,9 +97,11 @@ def do_evaluate(args):
         with tf.Session() as session:
             session.run(init)
             saver.restore(session, model.config.model_output)
-            for sentence, labels, predictions in model.output(session, input_data):
-                predictions = [LBLS[l] for l in predictions]
+            for (labels, preds, logits), loss in model.output(session, input_data):
                 print_sentence(args.output, sentence, labels, predictions)
+
+
+
 def do_test2(args):
     logger.info("Testing implementation of RNNModel")
     config = Config(args)
@@ -178,11 +187,14 @@ if __name__ == "__main__":
     command_parser.set_defaults(func=do_train)
 
     command_parser = subparsers.add_parser('evaluate', help='')
-    command_parser.add_argument('-d', '--data', type=argparse.FileType('r'), default="data/dev.conll", help="Training data")
+    command_parser.add_argument('-dd1', '--data-dev1', dest='data_dev1', type=argparse.FileType('r'))
+    command_parser.add_argument('-dd2', '--data-dev2', dest='data_dev2', type=argparse.FileType('r'))
+    command_parser.add_argument('-ddl', '--data-dev-labels', dest='data_dev_labels', type=argparse.FileType('r'))
     command_parser.add_argument('-m', '--model-path', help="Training data")
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/vocab.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")
     command_parser.add_argument('-c', '--cell', choices=["rnn", "gru"], default="rnn", help="Type of RNN cell to use.")
+    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', default=100)
     command_parser.add_argument('-o', '--output', type=argparse.FileType('w'), default=sys.stdout, help="Training data")
     command_parser.set_defaults(func=do_evaluate)
 
