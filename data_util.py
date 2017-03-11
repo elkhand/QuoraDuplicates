@@ -12,8 +12,6 @@ import numpy as np
 from util import read_dat, read_lab, one_hot, window_iterator, ConfusionMatrix, load_word_vector_mapping
 from defs import LBLS, NONE, LMAP, NUM, UNK, EMBED_SIZE
 
-import matplotlib.pyplot as plt
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
