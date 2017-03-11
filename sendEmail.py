@@ -8,7 +8,7 @@ import sys
 import time
 import datetime
 
-#['elkhan.dadashov@gmail.com']
+
 toEmail= sys.argv[1]
 recipients = [toEmail]
 emaillist = recipients
