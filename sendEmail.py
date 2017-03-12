@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+import subprocess
+import sys
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -7,7 +9,7 @@ import smtplib
 import sys
 import time
 import datetime
-
+import re
 
 toEmail= sys.argv[1]
 recipients = [toEmail]
@@ -20,16 +22,23 @@ while(True):
     msg['From'] = fromEmail
     msg['Reply-to'] = 'cs224ndlnlp@gmail.com'
 
+    fn=sys.argv[2]
+    sWords = ["809/809","2429/2429","INFO:Epoch","100/101"]
+    res=""
+    with open(fn) as origin_file:
+        for line in origin_file:
+            line = line.encode('utf-8')
+            for s in sWords:
+                if s in line:
+                    line = line[line.find(s):]
+                    #print line
+                    res+=line
+    f1s=res
+    print f1s
 
     msg.preamble = 'Multipart massage.\n'
-    part = MIMEText("Hi, please find the attached file")
+    part = MIMEText(f1s)
     msg.attach(part)
-
-
-    part = MIMEApplication(open(str(sys.argv[2]),"rb").read())
-    part.add_header('Content-Disposition', 'attachment', filename=str(sys.argv[2]))
-    msg.attach(part)
-
 
     server = smtplib.SMTP("smtp.gmail.com:587")
     server.ehlo()
