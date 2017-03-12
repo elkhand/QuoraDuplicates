@@ -264,6 +264,7 @@ class RNNModel(Model):
 
             # Initialize r_0 to zeros.
             r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
+            r_step = []
 
             for time_step in range(self.max_length):
 
@@ -288,8 +289,13 @@ class RNNModel(Model):
                 Y_alpha_t = tf.reduce_sum(Y * tmp3, 1)  # (?, hidden_size)
                 r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size)
 
+                r_step.append(r_t)
+
             # h* = tanh((W_p * r_L) + (W_x * h_N))
-            last_h = tf.tanh(tf.matmul(r_t, W_p) + tf.matmul(last_h, W_x))  # (?, hidden_size)
+            r = tf.transpose(tf.stack(r_step), [1, 2, 0])  # (?, hidden_size, L)
+            tmp4 = tf.one_hot(seqlen2, self.max_length, dtype=tf.float32)  # (?, L)
+            r_L = tf.squeeze(tf.matmul(r, tf.expand_dims(tmp4, 2)), 2)  # (?, hidden_size)
+            last_h = tf.tanh(tf.matmul(r_L, W_p) + tf.matmul(last_h, W_x))  # (?, hidden_size)
 
         return last_h
 
