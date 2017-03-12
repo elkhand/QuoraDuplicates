@@ -19,7 +19,6 @@ from q3_gru_cell import GRUCell
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
 
 from util import ConfusionMatrix, Progbar, minibatches
-from data_util import get_chunks
 from model import Model
 from defs import LBLS
 
@@ -39,7 +38,7 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 35 # longest sequence to parse
     n_classes = 2
-    dropout = 0.95
+    dropout = 0.7
     embed_size = 100 # todo: make depend on input
     hidden_size = 200
     batch_size = 100
@@ -59,7 +58,7 @@ class Config:
             # Where to save things.
             self.output_path = args.output_path
         else:
-            self.output_path = "results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
+            self.output_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+"/results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
         self.model_output = self.output_path + "model.weights"
         self.eval_output = self.output_path + "results.txt"
         self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
@@ -201,7 +200,7 @@ class RNNModel(Model):
 
         batch_size = tf.shape(x1)[0]
         hidden_size = self.config.hidden_size
-        h_step1, h_step2 = list(), list()
+        # h_step1, h_step2 = list(), list()
 
         BasicLSTMCell = tf.contrib.rnn.BasicLSTMCell if hasattr(tf.contrib.rnn, 'BasicLSTMCell') else tf.nn.rnn_cell.BasicLSTMCell
         LSTMStateTuple = tf.contrib.rnn.LSTMStateTuple if hasattr(tf.contrib.rnn, 'LSTMStateTuple') else tf.nn.rnn_cell.LSTMStateTuple
@@ -212,6 +211,13 @@ class RNNModel(Model):
         if self.config.cell == "lstm":
             cell1 = BasicLSTMCell(Config.hidden_size)
             cell2 = BasicLSTMCell(Config.hidden_size)
+            if hasattr(tf.contrib.nn.rnn_cell, 'DropoutWrapper'):
+                cell1 = tf.contrib.rnn.DropoutWrapper(cell1, self.dropout_placeholder)
+                cell2 = tf.contrib.rnn.DropoutWrapper(cell2, self.dropout_placeholder)
+            else:
+                cell1 = tf.nn.rnn_cell.DropoutWrapper(cell1, self.dropout_placeholder)
+                cell2 = tf.nn.rnn_cell.DropoutWrapper(cell2, self.dropout_placeholder)
+
         elif self.config.cell == "gru":
             cell1 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
             cell2 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
@@ -265,6 +271,7 @@ class RNNModel(Model):
 
             # Initialize r_0 to zeros.
             r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
+            r_step = []
 
             for time_step in range(self.max_length):
 
@@ -289,8 +296,13 @@ class RNNModel(Model):
                 Y_alpha_t = tf.reduce_sum(Y * tmp3, 1)  # (?, hidden_size)
                 r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size)
 
+                r_step.append(r_t)
+
             # h* = tanh((W_p * r_L) + (W_x * h_N))
-            last_h = tf.tanh(tf.matmul(r_t, W_p) + tf.matmul(last_h, W_x))  # (?, hidden_size)
+            r = tf.transpose(tf.stack(r_step), [1, 2, 0])  # (?, hidden_size, L)
+            tmp4 = tf.one_hot(seqlen2, self.max_length, dtype=tf.float32)  # (?, L)
+            r_L = tf.squeeze(tf.matmul(r, tf.expand_dims(tmp4, 2)), 2)  # (?, hidden_size)
+            last_h = tf.tanh(tf.matmul(r_L, W_p) + tf.matmul(last_h, W_x))  # (?, hidden_size)
 
         return last_h
 
@@ -354,7 +366,10 @@ class RNNModel(Model):
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
                                                    200000, self.config.lr_decay_rate, staircase=True)
         optimizer = tf.train.AdadeltaOptimizer(learning_rate=learning_rate)
-        train_op = optimizer.minimize(loss, global_step=global_step)
+        grads_and_vars = optimizer.compute_gradients(loss)
+        grads, grad_vars = zip(*grads_and_vars)
+        grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.config.max_grad_norm)
+        train_op = optimizer.apply_gradients(zip(grads, grad_vars))
         return train_op
 
     def preprocess_sequence_data(self, examples):
@@ -395,7 +410,8 @@ class RNNModel(Model):
         p = correct_preds / total_preds if correct_preds > 0 else 0
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        return (p, r, f1, loss)
+        acc = sum(labels==preds) / float(len(labels))
+        return (acc, p, r, f1, loss)
 
     def consolidate_predictions(self, examples_raw, examples_processed, preds, logits):
         """Batch the predictions into groups of sentence length.
@@ -441,15 +457,17 @@ class RNNModel(Model):
             if self.report: self.report.log_train_loss(loss)
         print("")
 
-        #logger.info("Evaluating on training data")
-        #token_cm, entity_scores = self.evaluate(sess, train_processed, train_processed_raw)
-        #logger.debug("Token-level confusion matrix:\n" + token_cm.as_table())
-        #logger.debug("Token-level scores:\n" + token_cm.summary())
-        #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
+        logger.info("Evaluating on training data: 10k sample")
+        n_train_evaluate = 10000
+        train_entity_scores = self.evaluate(sess, train_processed[:n_train_evaluate], train[:n_train_evaluate])
+        logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *train_entity_scores)
 
         logger.info("Evaluating on development data")
         entity_scores = self.evaluate(sess, dev_processed, dev)
-        logger.info("P/R/F1: %.3f/%.3f/%.3f/%.4f", *entity_scores)
+        logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
+
+        with open(self.config.eval_output, 'a') as f:
+            f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
 
         f1 = entity_scores[-2]
         return f1

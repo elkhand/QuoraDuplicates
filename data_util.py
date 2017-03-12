@@ -114,7 +114,7 @@ class ModelHelper(object):
             tok2id, max_length = pickle.load(f)
         return cls(tok2id, max_length)
 
-def load_and_preprocess_data(args):
+def load_and_preprocess_data(args, add_end_token=False):
     logger.info("Loading training data...")
     train_q1 = read_dat(args.data_train1)
     train_q2 = read_dat(args.data_train2)
@@ -129,6 +129,14 @@ def load_and_preprocess_data(args):
     assert len(dev_q1) == len(dev_q2)
     assert len(dev_q1) == len(dev_lab)
     logger.info("Done. Read %d sentence pairs", len(dev_lab))
+
+    if add_end_token:
+        for i in range(len(train_q1)):
+            train_q1[i].append(END_TOKEN)
+            train_q2[i].append(END_TOKEN)
+        for i in range(len(dev_q1)):
+            dev_q1[i].append(END_TOKEN)
+            dev_q2[i].append(END_TOKEN)
 
     train_to_build_lkp = zip(train_q1, train_q2, train_lab)
     helper = ModelHelper.build(train_to_build_lkp)
@@ -159,34 +167,3 @@ def build_dict(words, max_words=None, offset=0):
     else:
         words = cnt.most_common()
     return {word: offset+i for i, (word, _) in enumerate(words)}
-
-
-def get_chunks(seq, default=LBLS.index(NONE)):
-    """Breaks input of 4 4 4 0 0 4 0 ->   (0, 4, 5), (0, 6, 7)"""
-    chunks = []
-    chunk_type, chunk_start = None, None
-    for i, tok in enumerate(seq):
-        # End of a chunk 1
-        if tok == default and chunk_type is not None:
-            # Add a chunk.
-            chunk = (chunk_type, chunk_start, i)
-            chunks.append(chunk)
-            chunk_type, chunk_start = None, None
-        # End of a chunk + start of a chunk!
-        elif tok != default:
-            if chunk_type is None:
-                chunk_type, chunk_start = tok, i
-            elif tok != chunk_type:
-                chunk = (chunk_type, chunk_start, i)
-                chunks.append(chunk)
-                chunk_type, chunk_start = tok, i
-        else:
-            pass
-    # end condition
-    if chunk_type is not None:
-        chunk = (chunk_type, chunk_start, len(seq))
-        chunks.append(chunk)
-    return chunks
-
-def test_get_chunks():
-    assert get_chunks([4, 4, 4, 0, 0, 4, 1, 2, 4, 3], 4) == [(0,3,5), (1, 6, 7), (2, 7, 8), (3,9,10)]

@@ -19,7 +19,6 @@ from q3_gru_cell import GRUCell
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
 
 from util import ConfusionMatrix, Progbar, minibatches
-from data_util import get_chunks
 from model import Model
 from defs import LBLS
 
@@ -198,7 +197,6 @@ class RNNModel(Model):
         BasicLSTMCell = tf.contrib.rnn.BasicLSTMCell if hasattr(tf.contrib.rnn, 'BasicLSTMCell') else tf.nn.rnn_cell.BasicLSTMCell
         LSTMStateTuple = tf.contrib.rnn.LSTMStateTuple if hasattr(tf.contrib.rnn, 'LSTMStateTuple') else tf.nn.rnn_cell.LSTMStateTuple
 
-
         if self.config.cell == "lstm":
             cell = BasicLSTMCell(Config.hidden_size)
         elif self.config.cell1 == "gru":
@@ -231,7 +229,6 @@ class RNNModel(Model):
             #     _, h1, c1 = cell1(x_t, h1, c1)
             #     if time_step == 0:
             #         tf.get_variable_scope().reuse_variables()
-            h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
 
             tf.get_variable_scope().reuse_variables()
 
@@ -239,14 +236,13 @@ class RNNModel(Model):
             # for time_step in range(self.max_length):
             #     x_t = x2[:, time_step, :]
             #     _, h2, c2 = cell2(x_t, h2, c2)
-            h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
-        #preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
+        #preds = tf.reduce_sum(U * h1 * h2, 1) + b
 
         # representation layer
-        # e1 = tf.matmul(h1_drop, W) + b
+        # e1 = tf.matmul(h1, W) + b
         # r1 = tf.nn.relu(e1)
-        # e2 = tf.matmul(h2_drop, W) + b
+        # e2 = tf.matmul(h2, W) + b
         # r2 = tf.nn.relu(e2)
         #
         # # distance, angle
@@ -255,7 +251,7 @@ class RNNModel(Model):
         # sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
         # angle_12 = tf.reduce_sum(tf.mul(r1, r2), 1)
 
-        preds = tf.squeeze(tf.matmul(h1_drop * h2_drop, U), 1) + b_u
+        preds = tf.squeeze(tf.matmul(h1 * h2, U), 1) + b_u
 
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
         return preds

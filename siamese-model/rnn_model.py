@@ -19,7 +19,6 @@ from q3_gru_cell import GRUCell
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
 
 from util import ConfusionMatrix, Progbar, minibatches
-from data_util import get_chunks
 from model import Model
 from defs import LBLS
 
@@ -243,7 +242,6 @@ class RNNModel(Model):
             #     _, h1, c1 = cell1(x_t, h1, c1)
             #     if time_step == 0:
             #         tf.get_variable_scope().reuse_variables()
-            h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
 
             tf.get_variable_scope().reuse_variables()
 
@@ -256,24 +254,23 @@ class RNNModel(Model):
             # for time_step in range(self.max_length):
             #     x_t = x2[:, time_step, :]
             #     _, h2, c2 = cell2(x_t, h2, c2)
-            h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
         if self.config.second_hidden_size is None:
 
             if self.config.add_distance:
-                diff_12 = tf.sub(h1_drop, h2_drop)
+                diff_12 = tf.sub(h1, h2)
                 sqdiff_12 = tf.square(diff_12)
                 sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
                 inner_12 = tf.reduce_sum(U * h1 * h2, 1)
-                # inner_dist_12 = tf.reduce_sum(U2 * h1_drop * h2_drop, 1)
+                # inner_dist_12 = tf.reduce_sum(U2 * h1 * h2, 1)
                 preds = inner_12 + a * sqdist_12 + b
             else:
                 preds = tf.reduce_sum(U * h1 * h2, 1) + b
 
         else:
-            e1 = tf.matmul(h1_drop, W) + b
+            e1 = tf.matmul(h1, W) + b
             r1 = tf.nn.relu(e1)
-            e2 = tf.matmul(h2_drop, W) + b
+            e2 = tf.matmul(h2, W) + b
             r2 = tf.nn.relu(e2)
             preds = tf.squeeze(tf.matmul(U, r1*r2), 1) + b_u
 

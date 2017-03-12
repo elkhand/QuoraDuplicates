@@ -19,7 +19,6 @@ from q3_gru_cell import GRUCell
 from data_util import *
 
 from util import ConfusionMatrix, Progbar, minibatches
-from data_util import get_chunks
 from model import Model
 from defs import LBLS
 
@@ -40,7 +39,7 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 35 # longest sequence to parse
     n_classes = 2
-    dropout = 0.8
+    dropout = 0.99
     hidden_size = 512
     second_hidden_size = None
     batch_size = 100
@@ -229,19 +228,18 @@ class RNNModel(Model):
 
         else:
             U = tf.get_variable("U", shape=(1, self.config.hidden_size), initializer=xavier_init, dtype=tf.float32)
-            h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
-            h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
             if self.config.add_distance:
                 # U2 = tf.get_variable("U2", shape=(1, self.config.hidden_size), initializer=xavier_init, dtype=tf.float32)
                 a = tf.get_variable("a", initializer=xavier_init, shape=[1,])
-                diff_12 = tf.sub(h1, h2)
+                diff_12 = tf.nn.dropout(tf.sub(h1, h2), keep_prob=dropout_rate)
                 sqdiff_12 = tf.square(diff_12)
                 sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
-                inner_12 = tf.reduce_sum(U * (tf.sub(h1, h2)), 1)
+                inner_12 = tf.reduce_sum(U * (tf.square(tf.sub(h1, h2))), 1)
                 # inner_dist_12 = tf.reduce_sum(U2 * h1_drop * h2_drop, 1)
                 preds = inner_12 +  a * sqdist_12 + b
             else:
                 preds = tf.reduce_sum(U * (tf.sub(h1, h2)), 1) + b
+
 
         return preds
 
