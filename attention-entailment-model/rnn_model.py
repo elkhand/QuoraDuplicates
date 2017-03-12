@@ -124,8 +124,9 @@ class RNNModel(Model):
         """
 
         max_length = self.config.max_length
-        mask1_batch = [([1.0] * seqlen) + ([0.0] * (max_length - seqlen)) for seqlen in seqlen1_batch]
-        mask2_batch = [([1.0] * seqlen) + ([0.0] * (max_length - seqlen)) for seqlen in seqlen2_batch]
+        inf = float("inf")
+        mask1_batch = [([0.0] * seqlen) + ([-inf] * (max_length - seqlen)) for seqlen in seqlen1_batch]
+        mask2_batch = [([0.0] * seqlen) + ([-inf] * (max_length - seqlen)) for seqlen in seqlen2_batch]
 
         feed_dict = {
             self.input1_placeholder: inputs1_batch,
@@ -282,7 +283,7 @@ class RNNModel(Model):
                     M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, hidden_size)
 
                 # alpha_t = softmax(w^T * M_t)
-                alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2) * mask1)  # (?, L)
+                alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2) + mask1)  # (?, L)
 
                 # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
                 tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
