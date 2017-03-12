@@ -359,7 +359,10 @@ class RNNModel(Model):
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
                                                    200000, self.config.lr_decay_rate, staircase=True)
         optimizer = tf.train.AdadeltaOptimizer(learning_rate=learning_rate)
-        train_op = optimizer.minimize(loss, global_step=global_step)
+        grads_and_vars = optimizer.compute_gradients(loss)
+        grads, grad_vars = zip(*grads_and_vars)
+        grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.config.max_grad_norm)
+        train_op = optimizer.apply_gradients(zip(grads, grad_vars))
         return train_op
 
     def preprocess_sequence_data(self, examples):
