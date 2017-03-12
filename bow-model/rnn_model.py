@@ -232,7 +232,7 @@ class RNNModel(Model):
             if self.config.add_distance:
                 # U2 = tf.get_variable("U2", shape=(1, self.config.hidden_size), initializer=xavier_init, dtype=tf.float32)
                 a = tf.get_variable("a", initializer=xavier_init, shape=[1,])
-                diff_12 = tf.sub(h1, h2)
+                diff_12 = tf.nn.dropout(tf.sub(h1, h2), keep_prob=dropout_rate)
                 sqdiff_12 = tf.square(diff_12)
                 sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
                 inner_12 = tf.reduce_sum(U * h1_drop * h2_drop, 1)
