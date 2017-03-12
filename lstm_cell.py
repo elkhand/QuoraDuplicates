@@ -39,7 +39,7 @@ class LSTMCell(RNNCell):
     def output_size(self):
         return self._state_size
 
-    def __call__(self, inputs, state, cand, scope=None):
+    def __call__(self, inputs, state, scope=None):
         """Updates the state using the previous @state and @inputs.
         The LSTM equations are:
 
@@ -86,15 +86,16 @@ class LSTMCell(RNNCell):
             U_c = tf.get_variable("U_c", shape=U_shape, initializer=xavier_init) #initializer=tf.random_normal(U_shape, mean=mean, stddev=stddev))
             b_c = tf.get_variable("b_c", initializer=b_initial_value)
 
-            i_t = tf.sigmoid(tf.matmul(inputs, W_i) + tf.matmul(state, U_i) + b_i)
-            f_t = tf.sigmoid(tf.matmul(inputs, W_f) + tf.matmul(state, U_f) + b_f)
-            o_t = tf.sigmoid(tf.matmul(inputs, W_o) + tf.matmul(state, U_o) + b_o)
-            chat_t = tf.tanh(tf.matmul(inputs, W_c) + tf.matmul(state, U_c) + b_c)
-            c_t = (i_t * chat_t) + (f_t * cand)
-            h_t = o_t * tf.tanh(c_t)
+            c, h = state
+            i_t = tf.sigmoid(tf.matmul(inputs, W_i) + tf.matmul(h, U_i) + b_i)
+            f_t = tf.sigmoid(tf.matmul(inputs, W_f) + tf.matmul(h, U_f) + b_f)
+            o_t = tf.sigmoid(tf.matmul(inputs, W_o) + tf.matmul(h, U_o) + b_o)
+            chat_t = tf.tanh(tf.matmul(inputs, W_c) + tf.matmul(h, U_c) + b_c)
+            new_c = (i_t * chat_t) + (f_t * c)
+            new_h = o_t * tf.tanh(new_c)
             ### END YOUR CODE ###
 
-        return o_t, h_t, c_t
+        return new_h, (new_c, new_h)
 
 # def test_rnn_cell():
 #     with tf.Graph().as_default():

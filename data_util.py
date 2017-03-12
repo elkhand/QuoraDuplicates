@@ -12,6 +12,7 @@ import numpy as np
 from util import read_dat, read_lab, one_hot, window_iterator, ConfusionMatrix, load_word_vector_mapping
 from defs import LBLS, NONE, LMAP, NUM, UNK, EMBED_SIZE
 
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
@@ -141,7 +142,7 @@ def load_and_preprocess_data(args):
     return helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab
 
 def load_embeddings(args, helper):
-    embeddings = np.array(np.random.randn(len(helper.tok2id) + 1, args.embed_size), dtype=np.float32)
+    embeddings = np.array(np.random.randn(len(helper.tok2id) + 1, int(args.embed_size)), dtype=np.float32)
     embeddings[0] = 0.
     for word, vec in load_word_vector_mapping(args.vocab, args.vectors).items():
         word = normalize(word)

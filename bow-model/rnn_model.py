@@ -16,7 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lstm_cell import LSTMCell
 from q3_gru_cell import GRUCell
 
-from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
+from data_util import *
 
 from util import ConfusionMatrix, Progbar, minibatches
 from data_util import get_chunks
@@ -26,6 +26,7 @@ from defs import LBLS
 logger = logging.getLogger("hw3.q2")
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+
 
 
 class Config:
@@ -39,18 +40,18 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 35 # longest sequence to parse
     n_classes = 2
-    dropout = 0.95
+    dropout = 0.8
     embed_size = 100 # todo: make depend on input
-    hidden_size = 200
+    hidden_size = 1000
+    second_hidden_size = None
     batch_size = 100
     n_epochs = 100
     max_grad_norm = 10.
-    lr = 0.0001
+    lr = 0.0003
     lr_decay_rate = 0.9
-    uses_attention = True #wbw attention
-    score_type2 = True
     embeddings_trainable = True
     pos_weight = 1.7
+    add_distance = True
 
     def __init__(self, args):
         self.cell = "lstm"
@@ -59,7 +60,7 @@ class Config:
             # Where to save things.
             self.output_path = args.output_path
         else:
-            self.output_path = "results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
+            self.output_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+"/results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
         self.model_output = self.output_path + "model.weights"
         self.eval_output = self.output_path + "results.txt"
         self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
@@ -72,7 +73,6 @@ class RNNModel(Model):
     Implements a recursive neural network with an embedding layer and
     single hidden layer.
     """
-
     def build(self):
         super(RNNModel, self).build()
         pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
@@ -98,11 +98,11 @@ class RNNModel(Model):
         """
         self.input1_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.input2_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
+        self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,))
         self.seqlen1_placeholder = tf.placeholder(tf.int32, (None,))
         self.seqlen2_placeholder = tf.placeholder(tf.int32, (None,))
-        self.mask1_placeholder = tf.placeholder(tf.float32, (None, self.max_length))
-        self.mask2_placeholder = tf.placeholder(tf.float32, (None, self.max_length))
-        self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,))
+        self.featmask1_placeholder = tf.placeholder(tf.float32, (None, self.max_length))
+        self.featmask2_placeholder = tf.placeholder(tf.float32, (None, self.max_length))
         self.dropout_placeholder = tf.placeholder(tf.float32, [])
 
     def create_feed_dict(self, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch=None, dropout=1):
@@ -123,18 +123,13 @@ class RNNModel(Model):
         Returns:
             feed_dict: The feed dictionary mapping from placeholders to values.
         """
-
-        max_length = self.config.max_length
-        mask1_batch = [([1.0] * seqlen) + ([0.0] * (max_length - seqlen)) for seqlen in seqlen1_batch]
-        mask2_batch = [([1.0] * seqlen) + ([0.0] * (max_length - seqlen)) for seqlen in seqlen2_batch]
-
         feed_dict = {
             self.input1_placeholder: inputs1_batch,
             self.input2_placeholder: inputs2_batch,
             self.seqlen1_placeholder: seqlen1_batch,
             self.seqlen2_placeholder: seqlen2_batch,
-            self.mask1_placeholder: mask1_batch,
-            self.mask2_placeholder: mask2_batch,
+            self.featmask1_placeholder: featmask1_batch,
+            self.featmask2_placeholder: featmask2_batch,
             self.dropout_placeholder: dropout
         }
         if labels_batch is not None:
@@ -155,7 +150,7 @@ class RNNModel(Model):
             embeddings: tf.Tensor of shape (None, max_length, n_features*embed_size)
         """
         if self.config.embeddings_trainable:
-            embeddings = tf.Variable(self.pretrained_embeddings, name="embeddings")
+            embeddings = tf.Variable(self.pretrained_embeddings)
         else:
             embeddings = self.pretrained_embeddings
 
@@ -166,7 +161,7 @@ class RNNModel(Model):
         embeddings = tf.reshape(to_concat, [-1, self.config.max_length, self.config.n_features* self.config.embed_size])
         return embeddings
 
-    def add_asymmetric_prediction_op(self, x1, x2, seqlen1, seqlen2, mask1):
+    def add_prediction_op(self):
         """Adds the unrolled RNN:
             h_0 = 0
             for t in 1 to T:
@@ -199,120 +194,53 @@ class RNNModel(Model):
             pred: tf.Tensor of shape (batch_size, max_length, n_classes)
         """
 
-        batch_size = tf.shape(x1)[0]
-        hidden_size = self.config.hidden_size
-        h_step1, h_step2 = list(), list()
+        # embedding with mask
+        x1 = self.add_embedding(1) * tf.expand_dims(self.featmask1_placeholder, 2) # (?, L, embed_size) .* (?, L)
+        x2 = self.add_embedding(2) * tf.expand_dims(self.featmask2_placeholder, 2)
+        dropout_rate = self.dropout_placeholder
 
-        BasicLSTMCell = tf.contrib.rnn.BasicLSTMCell if hasattr(tf.contrib.rnn, 'BasicLSTMCell') else tf.nn.rnn_cell.BasicLSTMCell
-        LSTMStateTuple = tf.contrib.rnn.LSTMStateTuple if hasattr(tf.contrib.rnn, 'LSTMStateTuple') else tf.nn.rnn_cell.LSTMStateTuple
+        # bag of words mean and max over embeddings
+        z1 = tf.reduce_sum(x1, 1) / tf.expand_dims(tf.reduce_sum(self.featmask1_placeholder, 1), 1) # (?, embed_size)
+        z2 = tf.reduce_sum(x2, 1) / tf.expand_dims(tf.reduce_sum(self.featmask1_placeholder, 1), 1)
+        x1 = tf.reduce_max(x1, 1)
+        x2 = tf.reduce_max(x2, 1)
 
-        # Use the cell defined below. For Q2, we will just be using the
-        # RNNCell you defined, but for Q3, we will run this code again
-        # with a GRU cell!
-        if self.config.cell == "lstm":
-            cell1 = BasicLSTMCell(Config.hidden_size)
-            cell2 = BasicLSTMCell(Config.hidden_size)
-        elif self.config.cell == "gru":
-            cell1 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
-            cell2 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
+        # initialize variables
+        xavier_init = tf.contrib.layers.xavier_initializer()
+        W1 = tf.get_variable("W1", initializer=xavier_init, shape=[self.config.n_features* self.config.embed_size, self.config.hidden_size])
+        b1 = tf.get_variable("b1", initializer=xavier_init, shape=[self.config.hidden_size,])
+        W2 = tf.get_variable("W2", initializer=xavier_init, shape=[self.config.n_features* self.config.embed_size, self.config.hidden_size])
+        b = tf.get_variable("b2", initializer=xavier_init,  shape=[1,])
+
+        # relu, dropout
+        h1 = tf.nn.relu(tf.matmul(z1, W1) + tf.matmul(x1, W2) + b1)
+        h2 = tf.nn.relu(tf.matmul(z2, W1) + tf.matmul(x2, W2) + b1)
+
+        if self.config.second_hidden_size is not None:
+            U = tf.get_variable("U", shape = (1, self.config.second_hidden_size), initializer=xavier_init, dtype=tf.float32)
+            W3 = tf.get_variable("W3", initializer=xavier_init, shape=[self.config.hidden_size, self.config.second_hidden_size])
+            b3 = tf.get_variable("b3", initializer=xavier_init, shape=[self.config.second_hidden_size,])
+            r1 = tf.nn.relu(tf.matmul(h1, W3) + b3)
+            r2 = tf.nn.relu(tf.matmul(h2, W3) + b3)
+            r1_drop = tf.nn.dropout(r1, keep_prob=dropout_rate)
+            r2_drop = tf.nn.dropout(r2, keep_prob=dropout_rate)
+            preds = tf.reduce_sum(U * r1_drop * r2_drop, 1) + b
+
         else:
-            raise ValueError("Unsuppported cell type: " + self.config.cell)
-
-        # Initialize state as vector of zeros.
-        c = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
-        h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
-
-        with tf.variable_scope("LSTM1"):
-            Y, (c, h) = tf.nn.dynamic_rnn(cell1, x1, initial_state=LSTMStateTuple(c, h), sequence_length=seqlen1)
-            # for time_step in range(self.max_length):
-            #     x_t = x1[:, time_step, :]
-            #     _, h, c = cell1(x_t, h, c)
-            #     h_step1.append(h)
-            #     if time_step == 0:
-            #         tf.get_variable_scope().reuse_variables()
-
-        # Use c from the output of the 1st LSTM as input to the 2nd, and reset h.
-        h = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
-
-        with tf.variable_scope("LSTM2"):
-            Y2, (c, h) = tf.nn.dynamic_rnn(cell2, x2, initial_state=LSTMStateTuple(c, h), sequence_length=seqlen2)
-            # for time_step in range(self.max_length):
-            #     x_t = x2[:, time_step, :]
-            #     _, h, c = cell2(x_t, h, c)
-            #     h_step2.append(h)
-            #     if time_step == 0:
-            #         tf.get_variable_scope().reuse_variables()
-            last_h = h
-
-        if self.config.uses_attention:
-            xavier_init = tf.contrib.layers.xavier_initializer()
-            W_y = tf.get_variable("W_y", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
-            W_h = tf.get_variable("W_h", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
-            W_r = tf.get_variable("W_r", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
-            w = tf.get_variable("w", shape=[self.config.hidden_size], initializer=xavier_init)
-            W_t = tf.get_variable("W_t", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
-            W_p = tf.get_variable("W_p", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
-            W_x = tf.get_variable("W_x", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
-
-            # Y = tf.transpose(tf.stack(h_step1), [1, 0, 2])  # (?, L, hidden_size)
-
-            # Precompute W_y * Y, because it's used many times in the loop.
-            # Y's shape is (?, L, hidden_size)
-            # W_y's shape is (hidden_size, hidden_size)
-            tmp = tf.reshape(Y, [-1, hidden_size])  # (? * L, hidden_size)
-            tmp2 = tf.matmul(tmp, W_y)  # (? * L, hidden_size)
-            W_y_Y = tf.reshape(tmp2, [-1, self.max_length, hidden_size])  # (?, L, hidden_size)
-
-            # Initialize r_0 to zeros.
-            r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
-
-            for time_step in range(self.max_length):
-
-                h_t = Y2[:, time_step, :]
-
-                if self.config.score_type2:
-                    # M_t = Y .* ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
-                    tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
-                    tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
-                    M_t = Y * tmp2  # (?, L, hidden_size)
-                else:
-                    # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
-                    tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
-                    tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
-                    M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, hidden_size)
-
-                # alpha_t = softmax(w^T * M_t)
-                alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2) * mask1)  # (?, L)
-
-                # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
-                tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
-                Y_alpha_t = tf.reduce_sum(Y * tmp3, 1)  # (?, hidden_size)
-                r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size)
-
-            # h* = tanh((W_p * r_L) + (W_x * h_N))
-            last_h = tf.tanh(tf.matmul(r_t, W_p) + tf.matmul(last_h, W_x))  # (?, hidden_size)
-
-        return last_h
-
-    def add_prediction_op(self):
-        x1 = self.add_embedding(1)
-        x2 = self.add_embedding(2)
-
-        with tf.variable_scope("LSTM_attention"):
-            # Define U and b as variables.
-            xavier_init = tf.contrib.layers.xavier_initializer()
-            U = tf.get_variable("U", shape=(self.config.hidden_size,), dtype=tf.float32, initializer=xavier_init)
-            b = tf.Variable(initial_value=0.0, dtype=tf.float32, name="b")
-
-            last_h_a = self.add_asymmetric_prediction_op(x1, x2, self.seqlen1_placeholder, self.seqlen2_placeholder, self.mask1_placeholder)
-            tf.get_variable_scope().reuse_variables()
-            last_h_b = self.add_asymmetric_prediction_op(x2, x1, self.seqlen2_placeholder, self.seqlen1_placeholder, self.mask2_placeholder)
-
-            last_h = last_h_a + last_h_b
-
-            # use U and b for final prediction
-            h_drop = tf.nn.dropout(last_h, keep_prob=self.dropout_placeholder)
-            preds = tf.reduce_sum(U * h_drop, 1) + b
+            U = tf.get_variable("U", shape=(1, self.config.hidden_size), initializer=xavier_init, dtype=tf.float32)
+            h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
+            h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
+            if self.config.add_distance:
+                # U2 = tf.get_variable("U2", shape=(1, self.config.hidden_size), initializer=xavier_init, dtype=tf.float32)
+                a = tf.get_variable("a", initializer=xavier_init, shape=[1,])
+                diff_12 = tf.sub(h1, h2)
+                sqdiff_12 = tf.square(diff_12)
+                sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
+                inner_12 = tf.reduce_sum(U * h1_drop * h2_drop, 1)
+                # inner_dist_12 = tf.reduce_sum(U2 * h1_drop * h2_drop, 1)
+                preds = inner_12 +  a * sqdist_12 + b
+            else:
+                preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
 
         return preds
 
@@ -342,23 +270,25 @@ class RNNModel(Model):
 
         for more information.
 
+        Use tf.train.AdamOptimizer for this model.
+        Calling optimizer.minimize() will return a train_op object.
+
         Args:
             loss: Loss tensor, from cross_entropy_loss.
         Returns:
             train_op: The Op for training.
         """
-        # Optimizer: set up a variable that's incremented once per batch and
-        # controls the learning rate decay.
-        global_step = tf.Variable(0, trainable=False, name="global_step")
+        global_step = tf.Variable(0, trainable=False)
         starter_learning_rate = self.config.lr
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
                                                    200000, self.config.lr_decay_rate, staircase=True)
-        optimizer = tf.train.AdadeltaOptimizer(learning_rate=learning_rate)
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
         train_op = optimizer.minimize(loss, global_step=global_step)
         return train_op
 
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
+
 
     def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch):
         inputs1_batch = np.array(inputs1_batch)
@@ -366,22 +296,21 @@ class RNNModel(Model):
         feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch, featmask1_batch=featmask1_batch, featmask2_batch=featmask2_batch, labels_batch=labels_batch)
 
         logits, predictions, loss = sess.run([self.pred, self.predictions, self.loss], feed_dict=feed)
-
         return logits, predictions, loss
 
     def evaluate(self, sess, examples, examples_raw):
+        #def evaluate(self, sess, examples, examples_raw):
         """Evaluates model performance on @examples.
 
         This function uses the model to predict labels for @examples and constructs a confusion matrix.
 
         Args:
             sess: the current TensorFlow session.
-            examples: A list of vectorized input/output pairs.
-            examples: A list of the original input/output sequence pairs.
+            examples: A list of vectorized input/output pairs. Examples is padded.
+            examples: A list of the original input/output sequence pairs. Raw input,un-processed.
         Returns:
             The F1 score for predicting tokens as named entities.
         """
-
 
         (labels, preds, logits), loss = self.output(sess, examples_raw, examples) #*
         labels, preds, logits = np.array(labels, dtype=np.float32), np.array(preds), np.array(logits)
@@ -395,7 +324,9 @@ class RNNModel(Model):
         p = correct_preds / total_preds if correct_preds > 0 else 0
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        return (p, r, f1, loss)
+        acc = sum(labels==preds) / float(len(labels))
+
+        return (acc, p, r, f1, loss)
 
     def consolidate_predictions(self, examples_raw, examples_processed, preds, logits):
         """Batch the predictions into groups of sentence length.
@@ -406,6 +337,7 @@ class RNNModel(Model):
         labels = [x[2] for x in examples_raw]
 
         return labels, preds, logits
+
 
     def output(self, sess, inputs_raw, inputs):
         """
@@ -427,8 +359,8 @@ class RNNModel(Model):
             prog.update(i + 1, [])
         return self.consolidate_predictions(inputs_raw, inputs, preds, logits), np.mean(loss_record)
 
-    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, feat_mask1, feat_mask2, labels_batch):
-        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, feat_mask1, feat_mask2, labels_batch=labels_batch,
+    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch):
+        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch=labels_batch,
                                      dropout=Config.dropout)
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
@@ -441,15 +373,17 @@ class RNNModel(Model):
             if self.report: self.report.log_train_loss(loss)
         print("")
 
-        #logger.info("Evaluating on training data")
-        #token_cm, entity_scores = self.evaluate(sess, train_processed, train_processed_raw)
-        #logger.debug("Token-level confusion matrix:\n" + token_cm.as_table())
-        #logger.debug("Token-level scores:\n" + token_cm.summary())
-        #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
+        logger.info("Evaluating on training data: 10k sample")
+        n_train_evaluate = 10000
+        train_entity_scores = self.evaluate(sess, train_processed[:n_train_evaluate], train[:n_train_evaluate])
+        logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *train_entity_scores)
 
         logger.info("Evaluating on development data")
         entity_scores = self.evaluate(sess, dev_processed, dev)
-        logger.info("P/R/F1: %.3f/%.3f/%.3f/%.4f", *entity_scores)
+        logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
+        with open(self.config.eval_output, 'a') as f:
+            f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
+
 
         f1 = entity_scores[-2]
         return f1
@@ -457,6 +391,7 @@ class RNNModel(Model):
     def fit(self, sess, saver, train, dev):
         best_score = 0.
 
+        # Padded sentences
         train_processed = self.preprocess_sequence_data(train) # sent1, sent2, label
         dev_processed = self.preprocess_sequence_data(dev)
 
@@ -524,7 +459,7 @@ def pad_sequences(data, max_length):
             is the list of labels.
         max_length: the desired length for all input/output sequences.
     Returns:
-        a new list of data points of the structure (sentence', labels', mask).
+        a new list of data points of the structure (sent1, sent2, len1, len2, labels).
         Each of sentence', labels' and mask are of length @max_length.
         See the example above for more details.
     """
@@ -536,19 +471,18 @@ def pad_sequences(data, max_length):
     for sentence1, sentence2, label in data:
         feat_sent1 = zero_vector * max_length
         feat_sent2 = zero_vector * max_length
-        feat_mask1 = [False] * max_length
-        feat_mask2 = [False] * max_length
+        feat_mask1 = [0.0] * max_length
+        feat_mask2 = [0.0] * max_length
         for i, word in enumerate(sentence1):
             if i >= max_length:
                 break
             feat_sent1[i] = word
-            feat_mask1[i] = True
-
+            feat_mask1[i] = 1.0
         for i, word in enumerate(sentence2):
             if i >= max_length:
                 break
             feat_sent2[i] = word
-            feat_mask2[i] = True
+            feat_mask2[i] = 1.0
         seqlen1 = min(len(sentence1), max_length)
         seqlen2 = min(len(sentence2), max_length)
         ret.append((feat_sent1, feat_sent2, seqlen1, seqlen2, feat_mask1, feat_mask2, label))
