@@ -227,19 +227,17 @@ class RNNModel(Model):
 
         else:
             U = tf.get_variable("U", shape=(1, self.config.hidden_size), initializer=xavier_init, dtype=tf.float32)
-            h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
-            h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
             if self.config.add_distance:
                 # U2 = tf.get_variable("U2", shape=(1, self.config.hidden_size), initializer=xavier_init, dtype=tf.float32)
                 a = tf.get_variable("a", initializer=xavier_init, shape=[1,])
                 diff_12 = tf.nn.dropout(tf.sub(h1, h2), keep_prob=dropout_rate)
                 sqdiff_12 = tf.square(diff_12)
                 sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
-                inner_12 = tf.reduce_sum(U * h1_drop * h2_drop, 1)
-                # inner_dist_12 = tf.reduce_sum(U2 * h1_drop * h2_drop, 1)
+                inner_12 = tf.reduce_sum(U * h1 * h2, 1)
+                # inner_dist_12 = tf.reduce_sum(U2 * h1 * h2, 1)
                 preds = inner_12 +  a * sqdist_12 + b
             else:
-                preds = tf.reduce_sum(U * h1_drop * h2_drop, 1) + b
+                preds = tf.reduce_sum(U * h1 * h2, 1) + b
 
         return preds
 
