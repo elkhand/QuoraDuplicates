@@ -212,7 +212,7 @@ class RNNModel(Model):
         if self.config.cell == "lstm":
             cell1 = BasicLSTMCell(Config.hidden_size)
             cell2 = BasicLSTMCell(Config.hidden_size)
-            if hasattr(tf.contrib.nn.rnn_cell, 'DropoutWrapper'):
+            if hasattr(tf.contrib.rnn, 'DropoutWrapper'):
                 cell1 = tf.contrib.rnn.DropoutWrapper(cell1, self.dropout_placeholder)
                 cell2 = tf.contrib.rnn.DropoutWrapper(cell2, self.dropout_placeholder)
             else:
