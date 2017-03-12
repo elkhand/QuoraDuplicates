@@ -19,7 +19,6 @@ from q3_gru_cell import GRUCell
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
 
 from util import ConfusionMatrix, Progbar, minibatches
-from data_util import get_chunks
 from model import Model
 from defs import LBLS
 
@@ -201,7 +200,7 @@ class RNNModel(Model):
 
         batch_size = tf.shape(x1)[0]
         hidden_size = self.config.hidden_size
-        h_step1, h_step2 = list(), list()
+        # h_step1, h_step2 = list(), list()
 
         BasicLSTMCell = tf.contrib.rnn.BasicLSTMCell if hasattr(tf.contrib.rnn, 'BasicLSTMCell') else tf.nn.rnn_cell.BasicLSTMCell
         LSTMStateTuple = tf.contrib.rnn.LSTMStateTuple if hasattr(tf.contrib.rnn, 'LSTMStateTuple') else tf.nn.rnn_cell.LSTMStateTuple

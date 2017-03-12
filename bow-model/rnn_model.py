@@ -19,7 +19,6 @@ from q3_gru_cell import GRUCell
 from data_util import *
 
 from util import ConfusionMatrix, Progbar, minibatches
-from data_util import get_chunks
 from model import Model
 from defs import LBLS
 

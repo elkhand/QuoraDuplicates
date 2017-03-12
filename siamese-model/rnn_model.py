@@ -19,7 +19,6 @@ from q3_gru_cell import GRUCell
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
 
 from util import ConfusionMatrix, Progbar, minibatches
-from data_util import get_chunks
 from model import Model
 from defs import LBLS
 
