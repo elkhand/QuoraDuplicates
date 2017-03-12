@@ -29,7 +29,7 @@ from rnn_model import RNNModel, Config, logger
 def do_train(args):
     # Set up some parameters.
     config = Config(args)
-    helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab = load_and_preprocess_data(args)
+    helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab = load_and_preprocess_data(args, add_end_token=True)
     train = zip(train_dat1, train_dat2, train_lab)
     dev = zip(dev_dat1, dev_dat2, dev_lab)
     embeddings = load_embeddings(args, helper)
@@ -96,7 +96,7 @@ def do_evaluate(args):
 def do_test2(args):
     logger.info("Testing implementation of RNNModel")
     config = Config(args)
-    helper, train, dev, train_raw, dev_raw = load_and_preprocess_data(args)
+    helper, train, dev, train_raw, dev_raw = load_and_preprocess_data(args, add_end_token=True)
     embeddings = load_embeddings(args, helper)
     config.embed_size = embeddings.shape[1]
 
