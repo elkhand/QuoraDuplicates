@@ -39,9 +39,8 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 35 # longest sequence to parse
     n_classes = 2
-    dropout = 0.9
-    embed_size = 100 # todo: make depend on input
-    hidden_size = 1100
+    dropout = 0.5
+    hidden_size = 512
     second_hidden_size = None
     batch_size = 100
     n_epochs = 100
@@ -67,7 +66,7 @@ class Config:
         self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
 
         self.log_output = self.output_path + "log"
-
+        self.embed_size = int(args.embed_size)
 
 class RNNModel(Model):
     """
@@ -201,7 +200,10 @@ class RNNModel(Model):
 
         if self.config.cell == "lstm":
             cell = BasicLSTMCell(Config.hidden_size)
-            cell = tf.nn.rnn_cell.DropoutWrapper(cell, dropout_rate)
+            if hasattr(tf.contrib.nn.rnn_cell, 'DropoutWrapper'):
+                cell = tf.contrib.rnn.DropoutWrapper(cell, dropout_rate)
+            else:
+                cell = tf.nn.rnn_cell.DropoutWrapper(cell, dropout_rate)
         elif self.config.cell1 == "gru":
             cell = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
         else:
@@ -220,7 +222,7 @@ class RNNModel(Model):
             U = tf.get_variable("U",initializer=xavier_init,  shape=[1, m])
             b_u = tf.get_variable("b_u",initializer=xavier_init, shape=[])
             b = tf.get_variable("b",initializer=xavier_init,  shape=[1, m])
-            W = tf.get_variable("W",initializer=xavier_init, shape=[m, self.config.hidden_size])
+            W = tf.get_variable("W",initializer=xavier_init, shape=[self.config.hidden_size, m])
         if self.config.add_distance:
             a = tf.Variable(initial_value=np.ones((1,), dtype=np.float32), dtype=tf.float32)
 
@@ -258,21 +260,22 @@ class RNNModel(Model):
         if self.config.second_hidden_size is None:
 
             if self.config.add_distance:
-                diff_12 = tf.sub(h1, h2)
+                diff_12 = tf.nn.dropout(tf.sub(h1, h2), keep_prob=self.dropout_placeholder)
                 sqdiff_12 = tf.square(diff_12)
                 sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
-                inner_12 = tf.reduce_sum(U * h1 * h2, 1)
+                inner_12 = tf.reduce_sum(U * diff_12, 1)
                 # inner_dist_12 = tf.reduce_sum(U2 * h1 * h2, 1)
                 preds = inner_12 + a * sqdist_12 + b
             else:
-                preds = tf.reduce_sum(U * h1 * h2, 1) + b
+                preds = tf.reduce_sum(U * tf.sub(h1, h2), 1) + b
 
         else:
             e1 = tf.matmul(h1, W) + b
             r1 = tf.nn.relu(e1)
             e2 = tf.matmul(h2, W) + b
             r2 = tf.nn.relu(e2)
-            preds = tf.squeeze(tf.matmul(U, r1*r2), 1) + b_u
+            diff_12 = tf.nn.dropout(tf.sub(r1, r2), keep_prob=self.dropout_placeholder)
+            preds = tf.reduce_sum(U * diff_12, 1) + b_u
 
         # assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
         return preds
