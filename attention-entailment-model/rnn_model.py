@@ -38,7 +38,7 @@ class Config:
     n_features = n_word_features # Number of features for every word in the input.
     max_length = 35 # longest sequence to parse
     n_classes = 2
-    dropout = 0.95
+    dropout = 0.7
     embed_size = 100 # todo: make depend on input
     hidden_size = 200
     batch_size = 100
@@ -212,6 +212,13 @@ class RNNModel(Model):
         if self.config.cell == "lstm":
             cell1 = BasicLSTMCell(Config.hidden_size)
             cell2 = BasicLSTMCell(Config.hidden_size)
+            if hasattr(tf.contrib.nn.rnn_cell, 'DropoutWrapper'):
+                cell1 = tf.contrib.rnn.DropoutWrapper(cell1, self.dropout_placeholder)
+                cell2 = tf.contrib.rnn.DropoutWrapper(cell2, self.dropout_placeholder)
+            else:
+                cell1 = tf.nn.rnn_cell.DropoutWrapper(cell1, self.dropout_placeholder)
+                cell2 = tf.nn.rnn_cell.DropoutWrapper(cell2, self.dropout_placeholder)
+
         elif self.config.cell == "gru":
             cell1 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
             cell2 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
