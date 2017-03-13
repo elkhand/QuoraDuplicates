@@ -124,7 +124,7 @@ class RNNModel(Model):
         """
 
         max_length = self.config.max_length
-        inf = float("inf")
+        inf = 10000.0  # Use a pseudo infinity for numerical stability.
         mask1_batch = [([0.0] * seqlen) + ([-inf] * (max_length - seqlen)) for seqlen in seqlen1_batch]
         mask2_batch = [([0.0] * seqlen) + ([-inf] * (max_length - seqlen)) for seqlen in seqlen2_batch]
 
