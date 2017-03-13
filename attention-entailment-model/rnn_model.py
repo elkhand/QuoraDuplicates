@@ -301,7 +301,7 @@ class RNNModel(Model):
 
             # h* = tanh((W_p * r_L) + (W_x * h_N))
             r = tf.transpose(tf.stack(r_step), [1, 2, 0])  # (?, hidden_size, L)
-            tmp4 = tf.one_hot(seqlen2, self.max_length, dtype=tf.float32)  # (?, L)
+            tmp4 = tf.one_hot(seqlen2 - 1, self.max_length, dtype=tf.float32)  # (?, L)
             r_L = tf.squeeze(tf.matmul(r, tf.expand_dims(tmp4, 2)), 2)  # (?, hidden_size)
             last_h = tf.tanh(tf.matmul(r_L, W_p) + tf.matmul(last_h, W_x))  # (?, hidden_size)
 
