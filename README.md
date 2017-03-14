@@ -37,8 +37,8 @@ python run.py train \
 -ddl data/labels_dev.conll \
 -de1 data/dat_test_a.conll \
 -de2 data/dat_test_b.conll \
--v data/glvocab_1_100.txt \
--vv data/glwordvectors_1_100.txt \
+-v data/glvocab_300.txt \
+-vv data/glwordvectors_1_300.txt \
 -eb 100 \
 -cfg config/siamese_0.py
 ```
