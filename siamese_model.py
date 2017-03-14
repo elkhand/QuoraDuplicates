@@ -2,35 +2,30 @@
 from __future__ import absolute_import
 from __future__ import division
 import logging
-import sys
-import time
-from datetime import datetime
-import copy
 
 import tensorflow as tf
 import numpy as np
 
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
-
-from util import ConfusionMatrix, Progbar, minibatches
+from util import Progbar, minibatches
 from model import Model
+<<<<<<< HEAD:siamese-model/rnn_model.py
 from defs import LBLS
+=======
+from q3_gru_cell import GRUCell
+>>>>>>> master:siamese_model.py
 
 logger = logging.getLogger("hw3.q2")
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 
-class RNNModel(Model):
+class SiameseModel(Model):
     """
     Implements a recursive neural network with an embedding layer and
     single hidden layer.
     """
     def build(self):
-        super(RNNModel, self).build()
+        super(SiameseModel, self).build()
         pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
         self.predictions = tf.greater(tf.sigmoid(self.pred), pos_thres)
 
@@ -104,14 +99,11 @@ class RNNModel(Model):
 
         BasicLSTMCell = tf.contrib.rnn.BasicLSTMCell if hasattr(tf.contrib.rnn, 'BasicLSTMCell') else tf.nn.rnn_cell.BasicLSTMCell
         LSTMStateTuple = tf.contrib.rnn.LSTMStateTuple if hasattr(tf.contrib.rnn, 'LSTMStateTuple') else tf.nn.rnn_cell.LSTMStateTuple
-
+        DropoutWrapper = tf.contrib.rnn.DropoutWrapper if hasattr(tf.contrib.rnn, 'DropoutWrapper') else tf.nn.rnn_cell.DropoutWrapper
 
         if self.config.cell == "lstm":
             cell = BasicLSTMCell(self.config.hidden_size)
-            if hasattr(tf.contrib.rnn, 'DropoutWrapper'):
-                cell = tf.contrib.rnn.DropoutWrapper(cell, dropout_rate)
-            else:
-                cell = tf.nn.rnn_cell.DropoutWrapper(cell, dropout_rate)
+            cell = DropoutWrapper(cell, dropout_rate)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
@@ -143,14 +135,12 @@ class RNNModel(Model):
         sqdiff_12 = tf.square(h_sub)
         sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
         h_dist = tf.reshape(sqdist_12, [batch_size,1])
-        # mul(h1,h2)
         h_mul =  tf.multiply(h1 , h2) 
-        #h_combined = tf.concat(1,[h1,h2,h_dist,h_mul])#3*hidden_size+1
         if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
             h_combined = tf.concat([h1, h2, h_dist, h_mul], 1) # 3*hidden_size+1
         else:
             h_combined = tf.concat(1, [h1, h2, h_dist, h_mul]) # 3*hidden_size+1
-        h_combined_drop = tf.nn.dropout(h_combined, keep_prob=dropout_rate)
+        #h_combined_drop = tf.nn.dropout(h_combined, keep_prob=dropout_rate)
 
         e1 = tf.matmul(h_combined, W1) + b1 # [bath_size,m]
         e1_relu = tf.nn.relu(e1)
@@ -285,8 +275,7 @@ class RNNModel(Model):
         return self.consolidate_predictions(inputs_raw, inputs, preds, logits), np.mean(loss_record)
 
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
-        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=labels_batch,
-                                     dropout=self.config.dropout)
+        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=labels_batch, dropout=self.config.dropout)
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
 
@@ -349,11 +338,6 @@ class RNNModel(Model):
         self.max_length = min(self.config.max_length, helper.max_length)
         self.config.max_length = self.max_length # Just in case people make a mistake.
         self.pretrained_embeddings = pretrained_embeddings
-
-        # Defining placeholders.
-        self.input_placeholder = None
-        # self.mask_placeholder = None
-        self.dropout_placeholder = None
 
         self.build()
 
