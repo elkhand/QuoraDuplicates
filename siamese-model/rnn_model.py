@@ -128,9 +128,6 @@ class RNNModel(Model):
             W2 = tf.get_variable("W2",initializer=xavier_init, shape=[m, 2])
             tf.get_variable_scope().reuse_variables()
 
-        if self.config.add_distance:
-            a = tf.Variable(initial_value=np.ones((1,), dtype=np.float32), dtype=tf.float32)
-
         # Initialize state as vector of zeros.
         batch_size = tf.shape(x1)[0]
         h1 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
