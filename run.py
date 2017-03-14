@@ -11,31 +11,35 @@ import argparse
 import logging
 import sys
 import time
-from datetime import datetime
-import copy
 
 import tensorflow as tf
 import numpy as np
 
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from util import print_sentence, write_conll, read_dat, read_lab
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
 from defs import LBLS
-from rnn_model import RNNModel, logger
+from attention_model import AttentionModel
+from siamese_model import SiameseModel
+from bow_model import BOWModel
 import imp
+
+logger = logging.getLogger("hw3.q2")
+logger.setLevel(logging.DEBUG)
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 
 def do_train(args):
 
     # load config from input
     config_module_name = args.config.split(os.path.sep)[-1]
-    attention_config_module = imp.load_source(config_module_name, args.config)
-    config = attention_config_module.Config(args)
+    config_module = imp.load_source(config_module_name, args.config)
+    config = config_module.Config(args)
     print args.config
 
-    helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab = load_and_preprocess_data(args, add_end_token=True)
+    add_end_token = args.model is AttentionModel
+    helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab = load_and_preprocess_data(args, add_end_token=add_end_token)
     train = zip(train_dat1, train_dat2, train_lab)
     dev = zip(dev_dat1, dev_dat2, dev_lab)
     embeddings = load_embeddings(args, helper)
@@ -52,7 +56,7 @@ def do_train(args):
     with tf.Graph().as_default():
         logger.info("Building model...",)
         start = time.time()
-        model = RNNModel(helper, config, embeddings)
+        model = args.model(helper, config, embeddings)
         logger.info("took %.2f seconds", time.time() - start)
 
         init = tf.global_variables_initializer()
@@ -80,8 +84,8 @@ def do_evaluate(args):
 
     # load config from input
     config_module_name = args.config.split(os.path.sep)[-1]
-    attention_config_module = imp.load_source(config_module_name, args.config)
-    config = attention_config_module.Config(args)
+    config_module = imp.load_source(config_module_name, args.config)
+    config = config_module.Config(args)
     print args.model_path, args.config
 
     helper = ModelHelper.load(args.model_path)
@@ -98,7 +102,7 @@ def do_evaluate(args):
     with tf.Graph().as_default():
         logger.info("Building model...",)
         start = time.time()
-        model = RNNModel(helper, config, embeddings)
+        model = args.model(helper, config, embeddings)
 
         logger.info("took %.2f seconds", time.time() - start)
 
@@ -108,7 +112,6 @@ def do_evaluate(args):
         with tf.Session() as session:
             session.run(init)
             saver.restore(session, model.config.model_output)
-            model.output(session, dev_raw, dev_processed)
             dev_scores = model.evaluate(session, dev_processed, dev_raw)
             print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % dev_scores
 
@@ -116,8 +119,8 @@ def do_shell(args):
 
     # load config from input
     config_module_name = args.config.split(os.path.sep)[-1]
-    attention_config_module = imp.load_source(config_module_name, args.config)
-    config = attention_config_module.Config(args)
+    config_module = imp.load_source(config_module_name, args.config)
+    config = config_module.Config(args)
     print args.model_path, args.config
 
     helper = ModelHelper.load(args.model_path)
@@ -127,7 +130,7 @@ def do_shell(args):
     with tf.Graph().as_default():
         logger.info("Building model...",)
         start = time.time()
-        model = RNNModel(helper, config, embeddings)
+        model = args.model(helper, config, embeddings)
         logger.info("took %.2f seconds", time.time() - start)
 
         init = tf.global_variables_initializer()
@@ -154,11 +157,21 @@ input> Germany 's representative to the European Union 's veterinary committee .
                     print("Closing session.")
                     break
 
+def model_class(model_name):
+    if model_name == "attention":
+        return AttentionModel
+    if model_name == "siamese":
+        return SiameseModel
+    if model_name == "bow":
+        return BOWModel
+    raise ValueError("Unknown model: " + model_name)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Trains and tests an NER model')
     subparsers = parser.add_subparsers()
 
     command_parser = subparsers.add_parser('train', help='')
+    command_parser.add_argument('-m', '--model', type=model_class, required=True, help="Model to use.")
     command_parser.add_argument('-dt1', '--data-train1', dest='data_train1', type=argparse.FileType('r'))
     command_parser.add_argument('-dt2', '--data-train2', dest='data_train2', type=argparse.FileType('r'))
     command_parser.add_argument('-dtl', '--data-train-labels', dest='data_train_labels', type=argparse.FileType('r'))
@@ -169,29 +182,28 @@ if __name__ == "__main__":
     command_parser.add_argument('-de2', '--data-test2', dest='data_test2', type=argparse.FileType('r'))
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/glvocab_1_100.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/glwordvectors_1_100.txt", help="Path to word vectors file")
-    command_parser.add_argument('-c', '--cell', choices=["rnn", "gru", "lstm"], default="lstm", help="Type of RNN cell to use.")
     command_parser.add_argument('-eb', '--embed_size', dest='embed_size', default=100)
     command_parser.add_argument('-cfg', '--config', dest='config')
     command_parser.set_defaults(func=do_train)
 
     command_parser = subparsers.add_parser('evaluate', help='')
+    command_parser.add_argument('-m', '--model', type=model_class, required=True, help="Model to use.")
     command_parser.add_argument('-dd1', '--data-dev1', dest='data_dev1', type=argparse.FileType('r'))
     command_parser.add_argument('-dd2', '--data-dev2', dest='data_dev2', type=argparse.FileType('r'))
     command_parser.add_argument('-ddl', '--data-dev-labels', dest='data_dev_labels', type=argparse.FileType('r'))
-    command_parser.add_argument('-m', '--model-path', help="Training data")
+    command_parser.add_argument('-mp', '--model-path', help="Training data")
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/vocab.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")
-    command_parser.add_argument('-c', '--cell', choices=["rnn", "gru"], default="rnn", help="Type of RNN cell to use.")
     command_parser.add_argument('-eb', '--embed_size', dest='embed_size', default=100)
     command_parser.add_argument('-cfg', '--config', dest='config')
     command_parser.set_defaults(func=do_evaluate)
 
     command_parser = subparsers.add_parser('shell', help='')
-    command_parser.add_argument('-m', '--model-path', help="Training data")
+    command_parser.add_argument('-m', '--model', type=model_class, required=True, help="Model to use.")
+    command_parser.add_argument('-mp', '--model-path', help="Training data")
     command_parser.add_argument('-cfg', '--config', dest='config')
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/vocab.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")
-    command_parser.add_argument('-c', '--cell', choices=["rnn", "gru"], default="rnn", help="Type of RNN cell to use.")
     command_parser.set_defaults(func=do_shell)
 
     ARGS = parser.parse_args()
