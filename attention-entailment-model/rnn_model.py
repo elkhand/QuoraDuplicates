@@ -26,52 +26,11 @@ logger = logging.getLogger("hw3.q2")
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
-
-class Config:
-    """Holds model hyperparams and data information.
-
-    The config class is used to store various hyperparameters and dataset
-    information parameters. Model objects are passed a Config() object at
-    instantiation.
-    """
-    n_word_features = 1 # Number of features for every word in the input.
-    n_features = n_word_features # Number of features for every word in the input.
-    max_length = 35 # longest sequence to parse
-    n_classes = 2
-    dropout = 0.7
-    embed_size = 100 # todo: make depend on input
-    hidden_size = 200
-    batch_size = 100
-    n_epochs = 100
-    max_grad_norm = 10.
-    lr = 0.0001
-    lr_decay_rate = 0.9
-    uses_attention = True #wbw attention
-    score_type2 = True
-    embeddings_trainable = True
-    pos_weight = 1.7
-
-    def __init__(self, args):
-        self.cell = "lstm"
-
-        if "output_path" in args:
-            # Where to save things.
-            self.output_path = args.output_path
-        else:
-            self.output_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+"/results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
-        self.model_output = self.output_path + "model.weights"
-        self.eval_output = self.output_path + "results.txt"
-        self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
-
-        self.log_output = self.output_path + "log"
-
-
 class RNNModel(Model):
     """
     Implements a recursive neural network with an embedding layer and
     single hidden layer.
     """
-
     def build(self):
         super(RNNModel, self).build()
         pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
@@ -210,8 +169,8 @@ class RNNModel(Model):
         # RNNCell you defined, but for Q3, we will run this code again
         # with a GRU cell!
         if self.config.cell == "lstm":
-            cell1 = BasicLSTMCell(Config.hidden_size)
-            cell2 = BasicLSTMCell(Config.hidden_size)
+            cell1 = BasicLSTMCell(self.config.hidden_size)
+            cell2 = BasicLSTMCell(self.config.hidden_size)
             if hasattr(tf.contrib.rnn, 'DropoutWrapper'):
                 cell1 = tf.contrib.rnn.DropoutWrapper(cell1, self.dropout_placeholder)
                 cell2 = tf.contrib.rnn.DropoutWrapper(cell2, self.dropout_placeholder)
@@ -220,8 +179,8 @@ class RNNModel(Model):
                 cell2 = tf.nn.rnn_cell.DropoutWrapper(cell2, self.dropout_placeholder)
 
         elif self.config.cell == "gru":
-            cell1 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
-            cell2 = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
+            cell1 = GRUCell(self.config.n_features * self.config.embed_size, self.config.hidden_size)
+            cell2 = GRUCell(self.config.n_features * self.config.embed_size, self.config.hidden_size)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
@@ -446,7 +405,7 @@ class RNNModel(Model):
 
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, feat_mask1, feat_mask2, labels_batch):
         feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, feat_mask1, feat_mask2, labels_batch=labels_batch,
-                                     dropout=Config.dropout)
+                                     dropout=self.config.dropout)
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
 
@@ -466,9 +425,8 @@ class RNNModel(Model):
         logger.info("Evaluating on development data")
         entity_scores = self.evaluate(sess, dev_processed, dev)
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
-
         with open(self.config.eval_output, 'a') as f:
-            f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
+            f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[0], entity_scores[0], train_entity_scores[3], entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2]))
 
         f1 = entity_scores[-2]
         return f1
@@ -500,8 +458,8 @@ class RNNModel(Model):
         self.config = config
         self.report = report
 
-        self.max_length = min(Config.max_length, helper.max_length)
-        Config.max_length = self.max_length # Just in case people make a mistake.
+        self.max_length = min(self.config.max_length, helper.max_length)
+        self.config.max_length = self.max_length # Just in case people make a mistake.
         self.pretrained_embeddings = pretrained_embeddings
 
         # Defining placeholders.
@@ -512,7 +470,7 @@ class RNNModel(Model):
         self.build()
 
 
-def pad_sequences(data, max_length):
+def pad_sequences(data, max_length, n_features=1):
     """Ensures each input-output seqeunce pair in @data is of length
     @max_length by padding it with zeros and truncating the rest of the
     sequence.
@@ -550,7 +508,7 @@ def pad_sequences(data, max_length):
     ret = []
 
     # Use this zero vector when padding sequences.
-    zero_vector = [0] * Config.n_features
+    zero_vector = [0] * n_features
 
     for sentence1, sentence2, label in data:
         feat_sent1 = zero_vector * max_length
@@ -576,7 +534,7 @@ def pad_sequences(data, max_length):
 
 def test_pad_sequences():
     print 'test_pad_sequences not implemented'
-    # Config.n_features = 2
+    # self.config.n_features = 2
     # data = [
     #     ([[4,1], [6,0], [7,0]], [1, 0, 0]),
     #     ([[3,0], [3,4], [4,5], [5,3], [3,4]], [0, 1, 0, 2, 3]),
@@ -596,27 +554,4 @@ def test_pad_sequences():
 def do_test1(_):
     logger.info("Testing pad_sequences")
     test_pad_sequences()
-    logger.info("Passed!")
-
-def do_test2(args):
-    logger.info("Testing implementation of RNNModel")
-    config = Config(args)
-    helper, train, dev, train_raw, dev_raw = load_and_preprocess_data(args)
-    embeddings = load_embeddings(args, helper)
-    config.embed_size = embeddings.shape[1]
-
-    with tf.Graph().as_default():
-        logger.info("Building model...",)
-        start = time.time()
-        model = RNNModel(helper, config, embeddings)
-        logger.info("took %.2f seconds", time.time() - start)
-
-        init = tf.global_variables_initializer()
-        saver = None
-
-        with tf.Session() as session:
-            session.run(init)
-            model.fit(session, saver, train, dev)
-
-    logger.info("Model did not crash!")
     logger.info("Passed!")
