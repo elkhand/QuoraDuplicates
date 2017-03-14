@@ -32,7 +32,7 @@ def do_train(args):
     config_module_name = args.config.split(os.path.sep)[-1]
     siamese_config_module = imp.load_source(config_module_name, args.config)
     config = siamese_config_module.Config(args)
-    print args.model_path, args.config
+    print args.config
 
     helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab = load_and_preprocess_data(args)
     train = zip(train_dat1, train_dat2, train_lab)
