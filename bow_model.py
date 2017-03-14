@@ -2,25 +2,12 @@
 from __future__ import absolute_import
 from __future__ import division
 import logging
-import sys
-import time
-
-import copy
 
 import tensorflow as tf
 import numpy as np
 
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from lstm_cell import LSTMCell
-from q3_gru_cell import GRUCell
-
-from data_util import *
-
-from util import ConfusionMatrix, Progbar, minibatches
+from util import Progbar, minibatches
 from model import Model
-from defs import LBLS
 
 logger = logging.getLogger("hw3.q2")
 logger.setLevel(logging.DEBUG)
@@ -190,7 +177,7 @@ class BOWModel(Model):
             if self.config.add_distance:
                 # U2 = tf.get_variable("U2", shape=(1, self.config.hidden_size), initializer=xavier_init, dtype=tf.float32)
                 a = tf.get_variable("a", initializer=xavier_init, shape=[1,])
-                diff_12 = tf.nn.dropout(tf.sub(h1, h2), keep_prob=dropout_rate)
+                diff_12 = tf.nn.dropout(h1 - h2, keep_prob=dropout_rate)
                 sqdiff_12 = tf.square(diff_12)
                 sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
                 inner_12 = tf.reduce_sum(U * h1 * h2, 1)
@@ -317,8 +304,7 @@ class BOWModel(Model):
         return self.consolidate_predictions(inputs_raw, inputs, preds, logits), np.mean(loss_record)
 
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch):
-        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch=labels_batch,
-                                     dropout=self.config.dropout)
+        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch=labels_batch, dropout=self.config.dropout)
 
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
@@ -378,11 +364,6 @@ class BOWModel(Model):
         config.max_length = self.max_length # Just in case people make a mistake.
 
         self.pretrained_embeddings = pretrained_embeddings
-
-        # Defining placeholders.
-        self.input_placeholder = None
-        # self.mask_placeholder = None
-        self.dropout_placeholder = None
 
         self.build()
 
