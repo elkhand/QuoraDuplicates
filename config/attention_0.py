@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 class Config:
     """Holds model hyperparams and data information.

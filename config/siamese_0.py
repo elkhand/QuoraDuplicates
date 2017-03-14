@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 class Config:
     n_word_features = 1 # Number of features for every word in the input.
@@ -6,7 +7,6 @@ class Config:
     max_length = 35 # longest sequence to parse
     n_classes = 2
     dropout = 0.9
-    embed_size = 300 # todo: make depend on input
     hidden_size = 700
     batch_size = 100
     n_epochs = 100
