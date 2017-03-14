@@ -112,8 +112,6 @@ class RNNModel(Model):
                 cell = tf.contrib.rnn.DropoutWrapper(cell, dropout_rate)
             else:
                 cell = tf.nn.rnn_cell.DropoutWrapper(cell, dropout_rate)
-        elif self.config.cell1 == "gru":
-            cell = GRUCell(self.config.n_features * self.config.embed_size, self.config.hidden_size)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
