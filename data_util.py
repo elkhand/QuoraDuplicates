@@ -116,6 +116,7 @@ def load_and_preprocess_data(args, add_end_token=True):
     test_lab_dummy = [0 for i in range(len(test_q1))]
 
     train_to_build_lkp = zip(train_q1+dev_q1+test_q1, train_q2+dev_q2+test_q2, train_lab+dev_lab+test_lab_dummy)
+
     helper = ModelHelper.build(train_to_build_lkp)
 
     if add_end_token:

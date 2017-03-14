@@ -4,6 +4,7 @@ from __future__ import division
 import logging
 import sys
 import time
+
 import copy
 
 import tensorflow as tf
@@ -24,6 +25,7 @@ from defs import LBLS
 logger = logging.getLogger("hw3.q2")
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+
 
 class RNNModel(Model):
     """
@@ -197,7 +199,6 @@ class RNNModel(Model):
             else:
                 preds = tf.reduce_sum(U * h1 * h2, 1) + b
 
-
         return preds
 
     def add_loss_op(self, preds):
@@ -318,6 +319,7 @@ class RNNModel(Model):
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch):
         feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch=labels_batch,
                                      dropout=self.config.dropout)
+
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
 
@@ -374,6 +376,7 @@ class RNNModel(Model):
 
         self.max_length = min(config.max_length, helper.max_length)
         config.max_length = self.max_length # Just in case people make a mistake.
+
         self.pretrained_embeddings = pretrained_embeddings
 
         # Defining placeholders.
@@ -385,6 +388,7 @@ class RNNModel(Model):
 
 
 def pad_sequences(data, max_length, n_features=1):
+
     """Ensures each input-output seqeunce pair in @data is of length
     @max_length by padding it with zeros and truncating the rest of the
     sequence.
@@ -423,6 +427,7 @@ def pad_sequences(data, max_length, n_features=1):
 
     # Use this zero vector when padding sequences.
     zero_vector = [0] * n_features
+
 
     for sentence1, sentence2, label in data:
         feat_sent1 = zero_vector * max_length
@@ -468,3 +473,5 @@ def do_test1(_):
     logger.info("Testing pad_sequences")
     test_pad_sequences()
     logger.info("Passed!")
+
+

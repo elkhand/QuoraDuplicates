@@ -9,12 +9,12 @@ Running Attention-Entailment model:
 
 ```
 python attention-entailment-model/run.py train \
--dt1 data/dat_dev_a.conll \
--dt2 data/dat_dev_b.conll \
--dtl data/labels_dev.conll \
--dd1 data/sm_dat_train_a.conll \
--dd2 data/sm_dat_train_b.conll \
--ddl data/sm_labels_train.conll \
+-dt1 data/dat_train_a.conll \
+-dt2 data/dat_train_b.conll \
+-dtl data/labels_train.conll \
+-dd1 data/dat_dev_a.conll \
+-dd2 data/dat_dev_b.conll \
+-ddl data/labels_dev.conll \
 -v data/glvocab_1_100.txt \
 -vv data/glwordvectors_1_100.txt
 ```
@@ -31,6 +31,14 @@ python siamese-model/run.py train \
 -ddl data/labels_dev.conll \
 -v data/glvocab_1_100.txt \
 -vv data/glwordvectors_1_100.txt
+```
+
+Running sendEmail.py script:
+
+```
+python sendEmail.py elkhan.dadashov@gmail.com /home/elkhand/QuoraDuplicates/exp_march9_relu_pred.txt
+
+python sendEmail.py <your_email> <path_to_file_to_be_attached_to_email>
 ```
 
 
