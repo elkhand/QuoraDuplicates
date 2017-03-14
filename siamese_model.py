@@ -25,13 +25,13 @@ logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 
-class RNNModel(Model):
+class SiameseModel(Model):
     """
     Implements a recursive neural network with an embedding layer and
     single hidden layer.
     """
     def build(self):
-        super(RNNModel, self).build()
+        super(SiameseModel, self).build()
         pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
         self.predictions = tf.greater(tf.sigmoid(self.pred), pos_thres)
 
