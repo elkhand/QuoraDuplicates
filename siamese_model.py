@@ -2,22 +2,12 @@
 from __future__ import absolute_import
 from __future__ import division
 import logging
-import sys
-import time
-from datetime import datetime
-import copy
 
 import tensorflow as tf
 import numpy as np
 
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
-
-from util import ConfusionMatrix, Progbar, minibatches
+from util import Progbar, minibatches
 from model import Model
-from defs import LBLS
 from q3_gru_cell import GRUCell
 
 logger = logging.getLogger("hw3.q2")
@@ -105,14 +95,11 @@ class SiameseModel(Model):
 
         BasicLSTMCell = tf.contrib.rnn.BasicLSTMCell if hasattr(tf.contrib.rnn, 'BasicLSTMCell') else tf.nn.rnn_cell.BasicLSTMCell
         LSTMStateTuple = tf.contrib.rnn.LSTMStateTuple if hasattr(tf.contrib.rnn, 'LSTMStateTuple') else tf.nn.rnn_cell.LSTMStateTuple
-
+        DropoutWrapper = tf.contrib.rnn.DropoutWrapper if hasattr(tf.contrib.rnn, 'DropoutWrapper') else tf.nn.rnn_cell.DropoutWrapper
 
         if self.config.cell == "lstm":
             cell = BasicLSTMCell(self.config.hidden_size)
-            if hasattr(tf.contrib.rnn, 'DropoutWrapper'):
-                cell = tf.contrib.rnn.DropoutWrapper(cell, dropout_rate)
-            else:
-                cell = tf.nn.rnn_cell.DropoutWrapper(cell, dropout_rate)
+            cell = DropoutWrapper(cell, dropout_rate)
         elif self.config.cell1 == "gru":
             cell = GRUCell(self.config.n_features * self.config.embed_size, self.config.hidden_size)
         else:
@@ -121,10 +108,11 @@ class SiameseModel(Model):
         xavier_init = tf.contrib.layers.xavier_initializer()
 
         with tf.variable_scope("HiddenLayerVars"):
-            b = tf.get_variable("b2",initializer=xavier_init,  shape=[1,2])
-            W1 = tf.get_variable("W1",initializer=xavier_init, shape=[3*self.config.hidden_size+1, 2])
+            b = tf.get_variable("b2", initializer=xavier_init, shape=[1, 2])
+            W1 = tf.get_variable("W1", initializer=xavier_init, shape=[3*self.config.hidden_size+1, 2])
             tf.get_variable_scope().reuse_variables()
 
+        # FIXME: Are we using this?
         if self.config.add_distance:
             a = tf.Variable(initial_value=np.ones((1,), dtype=np.float32), dtype=tf.float32)
 
@@ -153,18 +141,17 @@ class SiameseModel(Model):
             #     _, h2, c2 = cell2(x_t, h2, c2)
             #h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
-       
-        h_sub = tf.subtract(h1, h2)
-        sqdiff_12 = tf.square(h_sub)
-        sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
-        h_dist = tf.reshape(sqdist_12, [batch_size,1])
-        h_mul =  tf.multiply(h1 , h2) 
+        h_dist = tf.reduce_sum(tf.square(h1 - h2), 1, keep_dims=True)
+        h_mul = h1 * h2
         if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
-            h_combined = tf.concat([h1, h2, h_dist, h_mul], 1) # 3*hidden_size+1
+            h_combined = tf.concat([h1, h2, h_dist, h_mul], 1) # (batch_size, 3*hidden_size + 1)
         else:
-            h_combined = tf.concat(1, [h1, h2, h_dist, h_mul]) # 3*hidden_size+1
+            h_combined = tf.concat(1, [h1, h2, h_dist, h_mul]) # (batch_size, 3*hidden_size + 1)
+
+        # FIXME: Are we using dropout here or not?
         h_combined_drop = tf.nn.dropout(h_combined, keep_prob=dropout_rate)
-        preds = tf.matmul(h_combined, W1) + b # [bath_size,m]
+
+        preds = tf.matmul(h_combined, W1) + b # (batch_size, 2)
         
         return preds
 
@@ -180,12 +167,9 @@ class SiameseModel(Model):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        xavier_init = tf.contrib.layers.xavier_initializer()
         loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=1.675))
         with tf.variable_scope("HiddenLayerVars", reuse=True):
-            b = tf.get_variable("b2",initializer=xavier_init,  shape=[1,2])
-            W1 = tf.get_variable("W1",initializer=xavier_init, shape=[3*self.config.hidden_size+1, 2])
-            tf.get_variable_scope().reuse_variables()
+            W1 = tf.get_variable("W1")
             loss = loss + self.config.beta*tf.nn.l2_loss(W1)
 
         return loss
@@ -291,8 +275,7 @@ class SiameseModel(Model):
         return self.consolidate_predictions(inputs_raw, inputs, preds, logits), np.mean(loss_record)
 
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
-        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=labels_batch,
-                                     dropout=self.config.dropout)
+        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=labels_batch, dropout=self.config.dropout)
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
 
@@ -352,11 +335,6 @@ class SiameseModel(Model):
         self.max_length = min(self.config.max_length, helper.max_length)
         self.config.max_length = self.max_length # Just in case people make a mistake.
         self.pretrained_embeddings = pretrained_embeddings
-
-        # Defining placeholders.
-        self.input_placeholder = None
-        # self.mask_placeholder = None
-        self.dropout_placeholder = None
 
         self.build()
 

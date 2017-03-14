@@ -2,25 +2,14 @@
 from __future__ import absolute_import
 from __future__ import division
 import logging
-import sys
-import time
-from datetime import datetime
-import copy
 
 import tensorflow as tf
 import numpy as np
 
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from lstm_cell import LSTMCell
 from q3_gru_cell import GRUCell
 
-from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
-
-from util import ConfusionMatrix, Progbar, minibatches
+from util import Progbar, minibatches
 from model import Model
-from defs import LBLS
 
 logger = logging.getLogger("hw3.q2")
 logger.setLevel(logging.DEBUG)
@@ -63,7 +52,7 @@ class AttentionModel(Model):
         self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,))
         self.dropout_placeholder = tf.placeholder(tf.float32, [])
 
-    def create_feed_dict(self, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch=None, dropout=1):
+    def create_feed_dict(self, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=None, dropout=1):
         """Creates the feed_dict for the dependency parser.
 
         A feed_dict takes the form of:
@@ -164,6 +153,7 @@ class AttentionModel(Model):
 
         BasicLSTMCell = tf.contrib.rnn.BasicLSTMCell if hasattr(tf.contrib.rnn, 'BasicLSTMCell') else tf.nn.rnn_cell.BasicLSTMCell
         LSTMStateTuple = tf.contrib.rnn.LSTMStateTuple if hasattr(tf.contrib.rnn, 'LSTMStateTuple') else tf.nn.rnn_cell.LSTMStateTuple
+        DropoutWrapper = tf.contrib.rnn.DropoutWrapper if hasattr(tf.contrib.rnn, 'DropoutWrapper') else tf.nn.rnn_cell.DropoutWrapper
 
         # Use the cell defined below. For Q2, we will just be using the
         # RNNCell you defined, but for Q3, we will run this code again
@@ -171,13 +161,9 @@ class AttentionModel(Model):
         if self.config.cell == "lstm":
             cell1 = BasicLSTMCell(self.config.hidden_size)
             cell2 = BasicLSTMCell(self.config.hidden_size)
-            if hasattr(tf.contrib.rnn, 'DropoutWrapper'):
-                cell1 = tf.contrib.rnn.DropoutWrapper(cell1, self.dropout_placeholder)
-                cell2 = tf.contrib.rnn.DropoutWrapper(cell2, self.dropout_placeholder)
-            else:
-                cell1 = tf.nn.rnn_cell.DropoutWrapper(cell1, self.dropout_placeholder)
-                cell2 = tf.nn.rnn_cell.DropoutWrapper(cell2, self.dropout_placeholder)
 
+            cell1 = DropoutWrapper(cell1, self.dropout_placeholder)
+            cell2 = DropoutWrapper(cell2, self.dropout_placeholder)
         elif self.config.cell == "gru":
             cell1 = GRUCell(self.config.n_features * self.config.embed_size, self.config.hidden_size)
             cell2 = GRUCell(self.config.n_features * self.config.embed_size, self.config.hidden_size)
@@ -335,10 +321,10 @@ class AttentionModel(Model):
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
 
-    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch):
+    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
         inputs1_batch = np.array(inputs1_batch)
         inputs2_batch = np.array(inputs2_batch)
-        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch, featmask1_batch=featmask1_batch, featmask2_batch=featmask2_batch, labels_batch=labels_batch)
+        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch, labels_batch=labels_batch)
 
         logits, predictions, loss = sess.run([self.pred, self.predictions, self.loss], feed_dict=feed)
 
@@ -403,9 +389,8 @@ class AttentionModel(Model):
             prog.update(i + 1, [])
         return self.consolidate_predictions(inputs_raw, inputs, preds, logits), np.mean(loss_record)
 
-    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, feat_mask1, feat_mask2, labels_batch):
-        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, feat_mask1, feat_mask2, labels_batch=labels_batch,
-                                     dropout=self.config.dropout)
+    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch):
+        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=labels_batch, dropout=self.config.dropout)
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
 
@@ -462,49 +447,10 @@ class AttentionModel(Model):
         self.config.max_length = self.max_length # Just in case people make a mistake.
         self.pretrained_embeddings = pretrained_embeddings
 
-        # Defining placeholders.
-        self.input_placeholder = None
-        # self.mask_placeholder = None
-        self.dropout_placeholder = None
-
         self.build()
 
 
 def pad_sequences(data, max_length, n_features=1):
-    """Ensures each input-output seqeunce pair in @data is of length
-    @max_length by padding it with zeros and truncating the rest of the
-    sequence.
-
-    In the code below, for every sentence, labels pair in @data,
-    (a) create a new sentence which appends zero feature vectors until
-    the sentence is of length @max_length. If the sentence is longer
-    than @max_length, simply truncate the sentence to be @max_length
-    long.
-    (b) create a new label sequence similarly.
-    (c) create a _masking_ sequence that has a True wherever there was a
-    token in the original sequence, and a False for every padded input.
-
-    Example: for the (sentence, labels) pair: [[4,1], [6,0], [7,0]], [1,
-    0, 0], and max_length = 5, we would construct
-        - a new sentence: [[4,1], [6,0], [7,0], [0,0], [0,0]]
-        - a new label seqeunce: [1, 0, 0, 4, 4], and
-        - a masking seqeunce: [True, True, True, False, False].
-
-    Args:
-        data: is a list of (sentence, labels) tuples. @sentence is a list
-            containing the words in the sentence and @label is a list of
-            output labels. Each word is itself a list of
-            @n_features features. For example, the sentence "Chris
-            Manning is amazing" and labels "PER PER O O" would become
-            ([[1,9], [2,9], [3,8], [4,8]], [1, 1, 4, 4]). Here "Chris"
-            the word has been featurized as "[1, 9]", and "[1, 1, 4, 4]"
-            is the list of labels.
-        max_length: the desired length for all input/output sequences.
-    Returns:
-        a new list of data points of the structure (sentence', labels', mask).
-        Each of sentence', labels' and mask are of length @max_length.
-        See the example above for more details.
-    """
     ret = []
 
     # Use this zero vector when padding sequences.
@@ -513,45 +459,16 @@ def pad_sequences(data, max_length, n_features=1):
     for sentence1, sentence2, label in data:
         feat_sent1 = zero_vector * max_length
         feat_sent2 = zero_vector * max_length
-        feat_mask1 = [False] * max_length
-        feat_mask2 = [False] * max_length
         for i, word in enumerate(sentence1):
             if i >= max_length:
                 break
             feat_sent1[i] = word
-            feat_mask1[i] = True
 
         for i, word in enumerate(sentence2):
             if i >= max_length:
                 break
             feat_sent2[i] = word
-            feat_mask2[i] = True
         seqlen1 = min(len(sentence1), max_length)
         seqlen2 = min(len(sentence2), max_length)
-        ret.append((feat_sent1, feat_sent2, seqlen1, seqlen2, feat_mask1, feat_mask2, label))
+        ret.append((feat_sent1, feat_sent2, seqlen1, seqlen2, label))
     return ret
-
-
-def test_pad_sequences():
-    print 'test_pad_sequences not implemented'
-    # self.config.n_features = 2
-    # data = [
-    #     ([[4,1], [6,0], [7,0]], [1, 0, 0]),
-    #     ([[3,0], [3,4], [4,5], [5,3], [3,4]], [0, 1, 0, 2, 3]),
-    #     ]
-    # ret = [
-    #     ([[4,1], [6,0], [7,0], [0,0]], [1, 0, 0, 4], [True, True, True, False]),
-    #     ([[3,0], [3,4], [4,5], [5,3]], [0, 1, 0, 2], [True, True, True, True])
-    #     ]
-    #
-    # ret_ = pad_sequences(data, 4)
-    # assert len(ret_) == 2, "Did not process all examples: expected {} results, but got {}.".format(2, len(ret_))
-    # for i in range(2):
-    #     assert len(ret_[i]) == 3, "Did not populate return values corrected: expected {} items, but got {}.".format(3, len(ret_[i]))
-    #     for j in range(3):
-    #         assert ret_[i][j] == ret[i][j], "Expected {}, but got {} for {}-th entry of {}-th example".format(ret[i][j], ret_[i][j], j, i)
-
-def do_test1(_):
-    logger.info("Testing pad_sequences")
-    test_pad_sequences()
-    logger.info("Passed!")

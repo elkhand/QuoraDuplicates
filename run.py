@@ -11,14 +11,11 @@ import argparse
 import logging
 import sys
 import time
-from datetime import datetime
-import copy
 
 import tensorflow as tf
 import numpy as np
 
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from util import print_sentence, write_conll, read_dat, read_lab
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
