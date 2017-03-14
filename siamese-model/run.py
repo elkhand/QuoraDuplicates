@@ -30,8 +30,8 @@ def do_train(args):
 
     # load config from input
     config_module_name = args.config.split(os.path.sep)[-1]
-    bow_config_module = imp.load_source(config_module_name, args.config)
-    config = bow_config_module.Config(args)
+    siamese_config_module = imp.load_source(config_module_name, args.config)
+    config = siamese_config_module.Config(args)
     print args.model_path, args.config
 
     helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab = load_and_preprocess_data(args)
@@ -79,8 +79,8 @@ def do_evaluate(args):
 
     # load config from input
     config_module_name = args.config.split(os.path.sep)[-1]
-    bow_config_module = imp.load_source(config_module_name, args.config)
-    config = bow_config_module.Config(args)
+    siamese_config_module = imp.load_source(config_module_name, args.config)
+    config = siamese_config_module.Config(args)
     print args.model_path, args.config
 
     helper = ModelHelper.load(args.model_path)
@@ -115,8 +115,8 @@ def do_shell(args):
 
     # load config from input
     config_module_name = args.config.split(os.path.sep)[-1]
-    bow_config_module = imp.load_source(config_module_name, args.config)
-    config = bow_config_module.Config(args)
+    siamese_config_module = imp.load_source(config_module_name, args.config)
+    config = siamese_config_module.Config(args)
     print args.model_path, args.config
 
     helper = ModelHelper.load(args.model_path)
@@ -171,6 +171,7 @@ if __name__ == "__main__":
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/glwordvectors_1_100.txt", help="Path to word vectors file")
     command_parser.add_argument('-c', '--cell', choices=["rnn", "gru", "lstm"], default="lstm", help="Type of RNN cell to use.")
     command_parser.add_argument('-eb', '--embed_size', dest='embed_size', default=100)
+    command_parser.add_argument('-cfg', '--config', dest='config')
     command_parser.set_defaults(func=do_train)
 
     command_parser = subparsers.add_parser('evaluate', help='')
@@ -180,10 +181,12 @@ if __name__ == "__main__":
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")
     command_parser.add_argument('-c', '--cell', choices=["rnn", "gru"], default="rnn", help="Type of RNN cell to use.")
     command_parser.add_argument('-o', '--output', type=argparse.FileType('w'), default=sys.stdout, help="Training data")
+    command_parser.add_argument('-cfg', '--config', dest='config')
     command_parser.set_defaults(func=do_evaluate)
 
     command_parser = subparsers.add_parser('shell', help='')
     command_parser.add_argument('-m', '--model-path', help="Training data")
+    command_parser.add_argument('-cfg', '--config', dest='config')
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/vocab.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")
     command_parser.add_argument('-c', '--cell', choices=["rnn", "gru"], default="rnn", help="Type of RNN cell to use.")
