@@ -137,6 +137,7 @@ def load_and_preprocess_data(args, add_end_token=True):
     return helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab
 
 def load_embeddings(args, helper):
+    np.random.seed(0)
     embeddings = np.array(np.random.randn(len(helper.tok2id) + 1, int(args.embed_size)), dtype=np.float32)
     embeddings[0] = 0.
     try:
