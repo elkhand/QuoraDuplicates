@@ -25,7 +25,6 @@ from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
 from defs import LBLS
 from attention_model import AttentionModel
 from siamese_model import SiameseModel
-#from siamese_distangle_model import SiameseDistangleModel  # TODO
 from bow_model import BOWModel
 import imp
 
@@ -166,8 +165,6 @@ def model_class(model_name):
         return AttentionModel
     if model_name == "siamese":
         return SiameseModel
-    #if model_name == "siamese-distangle":  # TODO
-    #    return SiameseDistangleModel
     if model_name == "bow":
         return BOWModel
     raise ValueError("Unknown model: " + model_name)
