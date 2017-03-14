@@ -10,14 +10,18 @@ import sys
 import time
 import datetime
 import re
-
+t=600
 toEmail= sys.argv[1]
 recipients = [toEmail]
 emaillist = recipients
 now = datetime.datetime.now()
 while(True):
     msg = MIMEMultipart()
-    msg['Subject'] = "CS224N Final Project Experiment "+str(now)
+    confInfo = ""
+    if len(sys.argv)>3:
+        confInfo = sys.argv[3]
+        # this is for config and which machine
+    msg['Subject'] = confInfo+" CS224N Final Project Experiment "+str(now)
     fromEmail = 'cs224ndlnlp@gmail.com'
     msg['From'] = fromEmail
     msg['Reply-to'] = 'cs224ndlnlp@gmail.com'
@@ -46,4 +50,4 @@ while(True):
     server.login(fromEmail, "azure123$")
 
     server.sendmail(msg['From'], emaillist , msg.as_string())
-    time.sleep(600)# Sleep 10 minutes
+    time.sleep(t)# Sleep t seconds
