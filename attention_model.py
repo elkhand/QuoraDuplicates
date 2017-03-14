@@ -6,8 +6,6 @@ import logging
 import tensorflow as tf
 import numpy as np
 
-from q3_gru_cell import GRUCell
-
 from util import Progbar, minibatches
 from model import Model
 
