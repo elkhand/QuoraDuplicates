@@ -39,7 +39,7 @@ python run.py train \
 -de2 data/dat_test_b.conll \
 -v data/glvocab_300.txt \
 -vv data/glwordvectors_1_300.txt \
--eb 100 \
+-eb 300 \
 -cfg config/siamese_0.py
 ```
 
