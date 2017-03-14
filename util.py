@@ -123,6 +123,20 @@ def load_word_vector_mapping(vocab_fstream, vector_fstream):
 
     return ret
 
+def load_word_vector_mapping_2(vector_fstream):
+    """
+    Load word vector mapping using @vocab_fstream, @vector_fstream.
+    Assumes each line of the vocab file matches with those of the vector
+    file.
+    """
+    ret = OrderedDict()
+    for vector in vector_fstream:
+        vector_list = list(vector.strip().split())
+        vocab = vector_list.pop(0)
+        vector_list = array(map(float, vector_list))
+        ret[vocab] = vector_list
+    return ret
+
 def test_load_word_vector_mapping():
     vocab = """UUUNKKK
 the

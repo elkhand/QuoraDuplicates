@@ -15,8 +15,12 @@ python attention-entailment-model/run.py train \
 -dd1 data/dat_dev_a.conll \
 -dd2 data/dat_dev_b.conll \
 -ddl data/labels_dev.conll \
+-de1 data/dat_test_a.conll \
+-de2 data/dat_test_b.conll \
 -v data/glvocab_1_100.txt \
--vv data/glwordvectors_1_100.txt
+-vv data/glwordvectors_1_100.txt \
+-eb 100 \
+-cfg config/attention_0.py
 ```
 
 Running Simaese model:
@@ -29,8 +33,12 @@ python siamese-model/run.py train \
 -dd1 data/dat_dev_a.conll \
 -dd2 data/dat_dev_b.conll \
 -ddl data/labels_dev.conll \
+-de1 data/dat_test_a.conll \
+-de2 data/dat_test_b.conll \
 -v data/glvocab_1_100.txt \
--vv data/glwordvectors_1_100.txt
+-vv data/glwordvectors_1_100.txt \
+-eb 100 \
+-cfg config/siamese_0.py
 ```
 
 Running sendEmail.py script:

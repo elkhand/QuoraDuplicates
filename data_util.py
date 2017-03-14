@@ -9,7 +9,7 @@ import logging
 from collections import Counter
 
 import numpy as np
-from util import read_dat, read_lab, one_hot, window_iterator, ConfusionMatrix, load_word_vector_mapping
+from util import read_dat, read_lab, one_hot, window_iterator, ConfusionMatrix, load_word_vector_mapping, load_word_vector_mapping_2
 from defs import LBLS, NONE, LMAP, NUM, UNK, EMBED_SIZE
 
 
@@ -18,23 +18,8 @@ logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 
-FDIM = 4
-P_CASE = "CASE:"
-CASES = ["aa", "AA", "Aa", "aA"]
 START_TOKEN = "<s>"
 END_TOKEN = "</s>"
-
-def casing(word):
-    if len(word) == 0: return word
-
-    # all lowercase
-    if word.islower(): return "aa"
-    # all uppercase
-    elif word.isupper(): return "AA"
-    # starts with capital
-    elif word[0].isupper(): return "Aa"
-    # has non-initial capital
-    else: return "aA"
 
 def normalize(word):
     """
@@ -47,12 +32,9 @@ def featurize(embeddings, word):
     """
     Featurize a word given embeddings.
     """
-    case = casing(word)
     word = normalize(word)
-    case_mapping = {c: one_hot(FDIM, i) for i, c in enumerate(CASES)}
     wv = embeddings.get(word, embeddings[UNK])
-    fv = case_mapping[case]
-    return np.hstack((wv, fv))
+    return np.hstack((wv,))
 
 def evaluate(model, X, Y):
     cm = ConfusionMatrix(labels=LBLS)
@@ -69,8 +51,8 @@ class ModelHelper(object):
     """
     def __init__(self, tok2id, max_length):
         self.tok2id = tok2id
-        self.START = [tok2id[START_TOKEN], tok2id[P_CASE + "aa"]]
-        self.END = [tok2id[END_TOKEN], tok2id[P_CASE + "aa"]]
+        self.START = [tok2id[START_TOKEN]]
+        self.END = [tok2id[END_TOKEN]]
         self.max_length = max_length
 
     def vectorize_example(self, sentence, labels=None):
@@ -87,8 +69,7 @@ class ModelHelper(object):
     def build(cls, data):
         # Preprocess data to construct an embedding
         # Reserve 0 for the special NIL token.
-        tok2id = build_dict((normalize(word) for sent1, sent2, _ in data for word in sent1 + sent2), offset=1, max_words=10000)
-        tok2id.update(build_dict([P_CASE + c for c in CASES], offset=len(tok2id)))
+        tok2id = build_dict((normalize(word) for sent1, sent2, _ in data for word in sent1 + sent2), offset=1, max_words=1000000)
         tok2id.update(build_dict([START_TOKEN, END_TOKEN, UNK], offset=len(tok2id)))
         assert sorted(tok2id.items(), key=lambda t: t[1])[0][1] == 1
         logger.info("Built dictionary for %d features.", len(tok2id))
@@ -114,7 +95,7 @@ class ModelHelper(object):
             tok2id, max_length = pickle.load(f)
         return cls(tok2id, max_length)
 
-def load_and_preprocess_data(args, add_end_token=False):
+def load_and_preprocess_data(args, add_end_token=True):
     logger.info("Loading training data...")
     train_q1 = read_dat(args.data_train1)
     train_q2 = read_dat(args.data_train2)
@@ -129,6 +110,14 @@ def load_and_preprocess_data(args, add_end_token=False):
     assert len(dev_q1) == len(dev_q2)
     assert len(dev_q1) == len(dev_lab)
     logger.info("Done. Read %d sentence pairs", len(dev_lab))
+    test_q1 = read_dat(args.data_test1)
+    test_q2 = read_dat(args.data_test2)
+    assert len(test_q1) == len(test_q2)
+    test_lab_dummy = [0 for i in range(len(test_q1))]
+
+    train_to_build_lkp = zip(train_q1+dev_q1+test_q1, train_q2+dev_q2+test_q2, train_lab+dev_lab+test_lab_dummy)
+
+    helper = ModelHelper.build(train_to_build_lkp)
 
     if add_end_token:
         for i in range(len(train_q1)):
@@ -138,8 +127,6 @@ def load_and_preprocess_data(args, add_end_token=False):
             dev_q1[i].append(END_TOKEN)
             dev_q2[i].append(END_TOKEN)
 
-    train_to_build_lkp = zip(train_q1, train_q2, train_lab)
-    helper = ModelHelper.build(train_to_build_lkp)
 
     # now process all the input data.
     train_dat1 = helper.vectorize(train_q1)
@@ -152,10 +139,16 @@ def load_and_preprocess_data(args, add_end_token=False):
 def load_embeddings(args, helper):
     embeddings = np.array(np.random.randn(len(helper.tok2id) + 1, int(args.embed_size)), dtype=np.float32)
     embeddings[0] = 0.
-    for word, vec in load_word_vector_mapping(args.vocab, args.vectors).items():
-        word = normalize(word)
-        if word in helper.tok2id:
-            embeddings[helper.tok2id[word]] = vec
+    try:
+        for word, vec in load_word_vector_mapping(args.vocab, args.vectors).items():
+            word = normalize(word)
+            if word in helper.tok2id:
+                embeddings[helper.tok2id[word]] = vec
+    except:
+        for word, vec in load_word_vector_mapping_2(args.vectors).items():
+            word = normalize(word)
+            if word in helper.tok2id:
+                embeddings[helper.tok2id[word]] = vec
     logger.info("Initialized embeddings.")
 
     return embeddings

@@ -4,7 +4,7 @@ from __future__ import division
 import logging
 import sys
 import time
-from datetime import datetime
+
 import copy
 
 import tensorflow as tf
@@ -25,47 +25,6 @@ from defs import LBLS
 logger = logging.getLogger("hw3.q2")
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
-
-
-
-class Config:
-    """Holds model hyperparams and data information.
-
-    The config class is used to store various hyperparameters and dataset
-    information parameters. Model objects are passed a Config() object at
-    instantiation.
-    """
-    n_word_features = 1 # Number of features for every word in the input.
-    n_features = n_word_features # Number of features for every word in the input.
-    max_length = 35 # longest sequence to parse
-    n_classes = 2
-    dropout = 0.99
-    hidden_size = 512
-    second_hidden_size = None
-    batch_size = 100
-    n_epochs = 100
-    max_grad_norm = 10.
-    lr = 0.0003
-    lr_decay_rate = 0.9
-    embeddings_trainable = True
-    pos_weight = 1.7
-    add_distance = True
-    use_diff = True
-
-    def __init__(self, args):
-        self.cell = "lstm"
-
-        if "output_path" in args:
-            # Where to save things.
-            self.output_path = args.output_path
-        else:
-            self.output_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+"/results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
-        self.model_output = self.output_path + "model.weights"
-        self.eval_output = self.output_path + "results.txt"
-        self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
-
-        self.log_output = self.output_path + "log"
-        self.embed_size = args.embed_size
 
 
 class RNNModel(Model):
@@ -234,12 +193,11 @@ class RNNModel(Model):
                 diff_12 = tf.nn.dropout(tf.sub(h1, h2), keep_prob=dropout_rate)
                 sqdiff_12 = tf.square(diff_12)
                 sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
-                inner_12 = tf.reduce_sum(U * (tf.square(tf.sub(h1, h2))), 1)
+                inner_12 = tf.reduce_sum(U * h1 * h2, 1)
                 # inner_dist_12 = tf.reduce_sum(U2 * h1_drop * h2_drop, 1)
                 preds = inner_12 +  a * sqdist_12 + b
             else:
-                preds = tf.reduce_sum(U * (tf.sub(h1, h2)), 1) + b
-
+                preds = tf.reduce_sum(U * h1 * h2, 1) + b
 
         return preds
 
@@ -360,7 +318,8 @@ class RNNModel(Model):
 
     def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch):
         feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch=labels_batch,
-                                     dropout=Config.dropout)
+                                     dropout=self.config.dropout)
+
         _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
         return loss
 
@@ -415,8 +374,9 @@ class RNNModel(Model):
         self.config = config
         self.report = report
 
-        self.max_length = min(Config.max_length, helper.max_length)
-        Config.max_length = self.max_length # Just in case people make a mistake.
+        self.max_length = min(config.max_length, helper.max_length)
+        config.max_length = self.max_length # Just in case people make a mistake.
+
         self.pretrained_embeddings = pretrained_embeddings
 
         # Defining placeholders.
@@ -427,7 +387,8 @@ class RNNModel(Model):
         self.build()
 
 
-def pad_sequences(data, max_length):
+def pad_sequences(data, max_length, n_features=1):
+
     """Ensures each input-output seqeunce pair in @data is of length
     @max_length by padding it with zeros and truncating the rest of the
     sequence.
@@ -465,7 +426,8 @@ def pad_sequences(data, max_length):
     ret = []
 
     # Use this zero vector when padding sequences.
-    zero_vector = [0] * Config.n_features
+    zero_vector = [0] * n_features
+
 
     for sentence1, sentence2, label in data:
         feat_sent1 = zero_vector * max_length
@@ -512,25 +474,4 @@ def do_test1(_):
     test_pad_sequences()
     logger.info("Passed!")
 
-def do_test2(args):
-    logger.info("Testing implementation of RNNModel")
-    config = Config(args)
-    helper, train, dev, train_raw, dev_raw = load_and_preprocess_data(args)
-    embeddings = load_embeddings(args, helper)
-    config.embed_size = embeddings.shape[1]
 
-    with tf.Graph().as_default():
-        logger.info("Building model...",)
-        start = time.time()
-        model = RNNModel(helper, config, embeddings)
-        logger.info("took %.2f seconds", time.time() - start)
-
-        init = tf.global_variables_initializer()
-        saver = None
-
-        with tf.Session() as session:
-            session.run(init)
-            model.fit(session, saver, train, dev)
-
-    logger.info("Model did not crash!")
-    logger.info("Passed!")
