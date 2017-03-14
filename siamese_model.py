@@ -8,11 +8,7 @@ import numpy as np
 
 from util import Progbar, minibatches
 from model import Model
-<<<<<<< HEAD:siamese-model/rnn_model.py
-from defs import LBLS
-=======
-from q3_gru_cell import GRUCell
->>>>>>> master:siamese_model.py
+
 
 logger = logging.getLogger("hw3.q2")
 logger.setLevel(logging.DEBUG)
