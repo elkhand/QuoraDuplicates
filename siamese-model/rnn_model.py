@@ -159,7 +159,10 @@ class RNNModel(Model):
         sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
         h_dist = tf.reshape(sqdist_12, [batch_size,1])
         h_mul =  tf.multiply(h1 , h2) 
-        h_combined = tf.concat(1,[h1,h2,h_dist,h_mul])#3*hidden_size+1
+        if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
+            h_combined = tf.concat([h1, h2, h_dist, h_mul], 1) # 3*hidden_size+1
+        else:
+            h_combined = tf.concat(1, [h1, h2, h_dist, h_mul]) # 3*hidden_size+1
         h_combined_drop = tf.nn.dropout(h_combined, keep_prob=dropout_rate)
         preds = tf.matmul(h_combined, W1) + b # [bath_size,m]
         
