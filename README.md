@@ -5,10 +5,11 @@ CS224N Final Project: Detecting if 2 questions are duplicates of each other.
 
 From the project's root directory (assuming you created data directory in <project-root> dir):
 
-Running Attention-Entailment model:
+Running Attention model:
 
 ```
-python attention-entailment-model/run.py train \
+python run.py train \
+-m attention \
 -dt1 data/dat_train_a.conll \
 -dt2 data/dat_train_b.conll \
 -dtl data/labels_train.conll \
@@ -26,7 +27,8 @@ python attention-entailment-model/run.py train \
 Running Simaese model:
 
 ```
-python siamese-model/run.py train \
+python run.py train \
+-m siamese \
 -dt1 data/dat_train_a.conll \
 -dt2 data/dat_train_b.conll \
 -dtl data/labels_train.conll \
