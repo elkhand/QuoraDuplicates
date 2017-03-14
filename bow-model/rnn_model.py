@@ -296,12 +296,12 @@ class RNNModel(Model):
         return labels, preds, logits
 
 
-    def output(self, sess, inputs_raw, inputs):
+    def output(self, sess, inputs_raw, inputs=None):
         """
         Reports the output of the model on examples (uses helper to featurize each example).
         """
         if inputs is None:
-            inputs = self.preprocess_sequence_data(self.helper.vectorize(inputs_raw))
+            inputs = self.preprocess_sequence_data(inputs_raw)
 
         preds = []
         logits = []

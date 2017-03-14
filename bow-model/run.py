@@ -106,8 +106,21 @@ def do_evaluate(args):
         with tf.Session() as session:
             session.run(init)
             saver.restore(session, model.config.model_output)
-            model.output(session, dev_raw, dev_processed)
-            dev_scores = model.evaluate(session, dev_processed, dev_raw)
+            (labels, preds, logits), loss = model.output(session, dev_raw)
+            labels, preds, logits = np.array(labels, dtype=np.float32), np.array(preds), np.array(logits)
+
+            correct_preds = np.logical_and(labels==1, preds==1).sum()
+            total_preds = float(np.sum(preds==1))
+            total_correct = float(np.sum(labels==1))
+
+            print correct_preds, total_preds, total_correct
+
+            p = correct_preds / total_preds if correct_preds > 0 else 0
+            r = correct_preds / total_correct if correct_preds > 0 else 0
+            f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
+            acc = sum(labels==preds) / float(len(labels))
+
+            dev_scores = (acc, p, r, f1, loss)
             print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % dev_scores
 
 

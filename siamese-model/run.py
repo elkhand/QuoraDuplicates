@@ -21,7 +21,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from util import print_sentence, write_conll, read_dat, read_lab
-from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
+from data_util import load_and_preprocess_data, load_embeddings, ModelHelper, END_TOKEN
 from defs import LBLS
 from rnn_model import RNNModel, logger
 import imp
