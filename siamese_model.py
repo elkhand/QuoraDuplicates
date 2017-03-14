@@ -8,7 +8,11 @@ import numpy as np
 
 from util import Progbar, minibatches
 from model import Model
+<<<<<<< HEAD:siamese-model/rnn_model.py
+from defs import LBLS
+=======
 from q3_gru_cell import GRUCell
+>>>>>>> master:siamese_model.py
 
 logger = logging.getLogger("hw3.q2")
 logger.setLevel(logging.DEBUG)
@@ -100,21 +104,19 @@ class SiameseModel(Model):
         if self.config.cell == "lstm":
             cell = BasicLSTMCell(self.config.hidden_size)
             cell = DropoutWrapper(cell, dropout_rate)
-        elif self.config.cell1 == "gru":
-            cell = GRUCell(self.config.n_features * self.config.embed_size, self.config.hidden_size)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
         xavier_init = tf.contrib.layers.xavier_initializer()
 
+        
+        m = self.config.second_hidden_size
         with tf.variable_scope("HiddenLayerVars"):
-            b = tf.get_variable("b2", initializer=xavier_init, shape=[1, 2])
-            W1 = tf.get_variable("W1", initializer=xavier_init, shape=[3*self.config.hidden_size+1, 2])
+            b1 = tf.get_variable("b1",initializer=xavier_init,  shape=[1, m])
+            b2 = tf.get_variable("b2",initializer=xavier_init,  shape=[1,2])
+            W1 = tf.get_variable("W1",initializer=xavier_init, shape=[3*self.config.hidden_size+1, m])
+            W2 = tf.get_variable("W2",initializer=xavier_init, shape=[m, 2])
             tf.get_variable_scope().reuse_variables()
-
-        # FIXME: Are we using this?
-        if self.config.add_distance:
-            a = tf.Variable(initial_value=np.ones((1,), dtype=np.float32), dtype=tf.float32)
 
         # Initialize state as vector of zeros.
         batch_size = tf.shape(x1)[0]
@@ -124,35 +126,27 @@ class SiameseModel(Model):
         c2 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
         with tf.variable_scope("LSTM"):
             Y, (c1, h1) = tf.nn.dynamic_rnn(cell, x1, initial_state=LSTMStateTuple(c1, h1), sequence_length=self.seqlen1_placeholder)
-
-            # for time_step in range(self.max_length):
-            #     x_t = x1[:, time_step, :]
-            #     _, h1, c1 = cell1(x_t, h1, c1)
-            #     if time_step == 0:
-            #         tf.get_variable_scope().reuse_variables()
             #h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
-
             tf.get_variable_scope().reuse_variables()
-
             Y, (c2, h2) = tf.nn.dynamic_rnn(cell, x2, initial_state=LSTMStateTuple(c2, h2), sequence_length=self.seqlen2_placeholder)
-
-            # for time_step in range(self.max_length):
-            #     x_t = x2[:, time_step, :]
-            #     _, h2, c2 = cell2(x_t, h2, c2)
             #h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
-        h_dist = tf.reduce_sum(tf.square(h1 - h2), 1, keep_dims=True)
-        h_mul = h1 * h2
+        h_sub = tf.subtract(h1, h2)
+        sqdiff_12 = tf.square(h_sub)
+        sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
+        h_dist = tf.reshape(sqdist_12, [batch_size,1])
+        h_mul =  tf.multiply(h1 , h2) 
         if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
-            h_combined = tf.concat([h1, h2, h_dist, h_mul], 1) # (batch_size, 3*hidden_size + 1)
+            h_combined = tf.concat([h1, h2, h_dist, h_mul], 1) # 3*hidden_size+1
         else:
-            h_combined = tf.concat(1, [h1, h2, h_dist, h_mul]) # (batch_size, 3*hidden_size + 1)
+            h_combined = tf.concat(1, [h1, h2, h_dist, h_mul]) # 3*hidden_size+1
+        #h_combined_drop = tf.nn.dropout(h_combined, keep_prob=dropout_rate)
 
-        # FIXME: Are we using dropout here or not?
-        h_combined_drop = tf.nn.dropout(h_combined, keep_prob=dropout_rate)
+        e1 = tf.matmul(h_combined, W1) + b1 # [bath_size,m]
+        e1_relu = tf.nn.relu(e1)
+        e1_drop = tf.nn.dropout(e1_relu, keep_prob=dropout_rate)
+        preds = tf.matmul(e1_drop,W2) + b2
 
-        preds = tf.matmul(h_combined, W1) + b # (batch_size, 2)
-        
         return preds
 
     def add_loss_op(self, preds):
@@ -167,10 +161,17 @@ class SiameseModel(Model):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=1.675))
+        
+        m = self.config.second_hidden_size
+        xavier_init = tf.contrib.layers.xavier_initializer()
+        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=1.675))       
         with tf.variable_scope("HiddenLayerVars", reuse=True):
-            W1 = tf.get_variable("W1")
-            loss = loss + self.config.beta*tf.nn.l2_loss(W1)
+            b1 = tf.get_variable("b1",initializer=xavier_init,  shape=[1, m])
+            b2 = tf.get_variable("b2",initializer=xavier_init,  shape=[1,2])
+            W1 = tf.get_variable("W1",initializer=xavier_init, shape=[3*self.config.hidden_size+1, m])
+            W2 = tf.get_variable("W2",initializer=xavier_init, shape=[m, 2])
+            tf.get_variable_scope().reuse_variables()
+        loss = loss + self.config.beta*tf.nn.l2_loss(W1)+ self.config.beta*tf.nn.l2_loss(W2)
 
         return loss
 
@@ -193,7 +194,6 @@ class SiameseModel(Model):
         Returns:
             train_op: The Op for training.
         """
-
         global_step = tf.Variable(0, name='global_step', trainable=False)
         starter_learning_rate = self.config.lr
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
@@ -297,6 +297,9 @@ class SiameseModel(Model):
         logger.info("Evaluating on development data")
         entity_scores = self.evaluate(sess, dev_processed, dev)
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
+
+        # with open(self.config.eval_output, 'a') as f:
+        #     f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
 
         with open(self.config.eval_output, 'a') as f:
             f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[0], entity_scores[0], train_entity_scores[3], entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2]))
