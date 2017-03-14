@@ -340,7 +340,7 @@ class RNNModel(Model):
         entity_scores = self.evaluate(sess, dev_processed, dev)
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
         with open(self.config.eval_output, 'a') as f:
-            f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
+            f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[0], entity_scores[0], train_entity_scores[3], entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2]))
 
 
         f1 = entity_scores[-2]
