@@ -19,7 +19,6 @@ import os
 
 from util import print_sentence, write_conll, read_dat, read_lab
 from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
-from defs import LBLS
 from attention_model import AttentionModel
 from siamese_model import SiameseModel
 from bow_model import BOWModel
@@ -70,15 +69,16 @@ def do_train(args):
                 report.save()
             else:
                 # Save predictions in a text file.
-                output = model.output(session, dev)
-                sentences, labels, predictions = zip(*output)
-                output = zip(sentences, labels, predictions)
+                # output = model.output(session, dev)
+                # sentences, labels, predictions = zip(*output)
+                # output = zip(sentences, labels, predictions)
 
-                with open(model.config.conll_output, 'w') as f:
-                    write_conll(f, output)
-                with open(model.config.eval_output, 'w') as f:
-                    for sentence, labels, predictions in output:
-                        print_sentence(f, sentence, labels, predictions)
+                # with open(model.config.conll_output, 'w') as f:
+                #     write_conll(f, output)
+                # with open(model.config.eval_output, 'w') as f:
+                #     for sentence, labels, predictions in output:
+                #         print_sentence(f, sentence, labels, predictions)
+                pass
 
 def do_evaluate(args):
 
@@ -108,11 +108,10 @@ def do_evaluate(args):
 
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
-        dev_processed = model.preprocess_sequence_data(dev_raw)
         with tf.Session() as session:
             session.run(init)
             saver.restore(session, model.config.model_output)
-            dev_scores = model.evaluate(session, dev_processed, dev_raw)
+            dev_scores = model.evaluate(session, dev_raw)
             print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % dev_scores
 
 def do_shell(args):
@@ -143,16 +142,24 @@ def do_shell(args):
             print("""Welcome!
 You can use this shell to explore the behavior of your model.
 Please enter sentences with spaces between tokens, e.g.,
-input> Germany 's representative to the European Union 's veterinary committee .
+input1> Do you like cats ?
+input2> Are cats better than people ?
 """)
             while True:
                 # Create simple REPL
                 try:
-                    sentence = raw_input("input> ")
-                    tokens = sentence.strip().split(" ")
-                    for sentence, _, predictions in model.output(session, [(tokens, ["O"] * len(tokens))]):
-                        predictions = [LBLS[l] for l in predictions]
-                        print_sentence(sys.stdout, sentence, [""] * len(tokens), predictions)
+                    sentence1 = raw_input("input1> ")
+                    sentence2 = raw_input("input2> ")
+                    tokens1 = sentence1.strip().split(" ")
+                    tokens2 = sentence2.strip().split(" ")
+                    sentence1, sentence2 = helper.vectorize([tokens1, tokens2])
+                    predictions, _ = model.output(session, [(sentence1, sentence2, 0)])
+                    prediction = predictions[0]
+                    if prediction == 1:
+                        print "Similar"
+                    else:
+                        print "Not similar"
+                    #print_sentence(sys.stdout, sentence, [""] * len(tokens), predictions)
                 except EOFError:
                     print("Closing session.")
                     break
@@ -204,6 +211,7 @@ if __name__ == "__main__":
     command_parser.add_argument('-cfg', '--config', dest='config')
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/vocab.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")
+    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', default=100)
     command_parser.set_defaults(func=do_shell)
 
     ARGS = parser.parse_args()
