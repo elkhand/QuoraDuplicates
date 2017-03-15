@@ -100,7 +100,7 @@ class Model(object):
         embeddings = tf.reshape(to_concat, [-1, self.config.max_length, self.config.n_features * self.config.embed_size])
         return embeddings
 
-    def predict_on_batch(self, sess, batch):
+    def _predict_on_batch(self, sess, batch):
         """Make predictions for the provided batch of data."""
 
         #inputs1_batch = np.array(inputs1_batch)
@@ -110,21 +110,16 @@ class Model(object):
         predictions, loss = sess.run([self.predictions, self.loss], feed_dict=feed)
         return predictions, loss
 
-    def evaluate(self, sess, examples, examples_raw):
-        """Evaluates model performance on @examples.
+    def evaluate(self, sess, inputs_raw):
+        """Evaluates model performance on @examples."""
+        inputs = self.preprocess_sequence_data(inputs_raw)
+        labels = [label for sentence1, sentence2, label in inputs_raw]
+        return self._evaluate(sess, inputs, labels)
 
-        This function uses the model to predict labels for @examples and constructs a confusion matrix.
-
-        Args:
-            sess: the current TensorFlow session.
-            examples: A list of vectorized input/output pairs. Examples is padded.
-            examples: A list of the original input/output sequence pairs. Raw input,un-processed.
-        Returns:
-            The F1 score for predicting tokens as named entities.
-        """
-
-        (labels, preds), loss = self.output(sess, examples_raw, examples)
-        labels, preds = np.array(labels, dtype=np.float32), np.array(preds)
+    def _evaluate(self, sess, inputs, labels):
+        preds, loss = self._output(sess, inputs)
+        labels = np.array(labels, dtype=np.float32)
+        preds = np.array(preds)
 
         correct_preds = np.logical_and(labels==1, preds==1).sum()
         total_preds = float(np.sum(preds==1))
@@ -138,36 +133,36 @@ class Model(object):
         acc = sum(labels==preds) / float(len(labels))
         return (acc, p, r, f1, loss)
 
-    def output(self, sess, inputs_raw, inputs):
+    def output(self, sess, inputs_raw):
         """
         Reports the output of the model on examples (uses helper to featurize each example).
         """
-        if inputs is None:
-            inputs = self.preprocess_sequence_data(self.helper.vectorize(inputs_raw))
+        inputs = self.preprocess_sequence_data(inputs_raw)
+        return self._output(sess, inputs)
 
+    def _output(self, sess, inputs):
         preds = []
         loss_record = []
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
         for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
             # batch = batch[:4] # ignore label
-            preds_, loss_ = self.predict_on_batch(sess, batch)
+            preds_, loss_ = self._predict_on_batch(sess, batch)
             preds += list(preds_)
             loss_record.append(loss_)
             prog.update(i + 1, [])
-        labels = [label for sentence1, sentence2, label in inputs_raw]
-        return (labels, preds), np.mean(loss_record)
+        return preds, np.mean(loss_record)
 
-    def train_on_batch(self, sess, batch):
+    def _train_on_batch(self, sess, batch):
         """Perform one step of gradient descent on the provided batch of data."""
 
         feed = self.create_feed_dict(*batch, dropout=self.config.dropout)
         _, loss = sess.run([self.train_op, self.loss], feed_dict=feed)
         return loss
 
-    def run_epoch(self, sess, train_processed, dev_processed, train, dev):
-        prog = Progbar(target=1 + int(len(train_processed) / self.config.batch_size))
-        for i, batch in enumerate(minibatches(train_processed, self.config.batch_size)):
-            loss = self.train_on_batch(sess, batch)
+    def _run_epoch(self, sess, train, train_labels, dev, dev_labels):
+        prog = Progbar(target=1 + int(len(train) / self.config.batch_size))
+        for i, batch in enumerate(minibatches(train, self.config.batch_size)):
+            loss = self._train_on_batch(sess, batch)
             prog.update(i + 1, [("train loss", loss)])
 
             if self.report: self.report.log_train_loss(loss)
@@ -175,11 +170,11 @@ class Model(object):
 
         logger.info("Evaluating on training data: 10k sample")
         n_train_evaluate = 10000
-        train_entity_scores = self.evaluate(sess, train_processed[:n_train_evaluate], train[:n_train_evaluate])
+        train_entity_scores = self._evaluate(sess, train[:n_train_evaluate], train_labels[:n_train_evaluate])
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *train_entity_scores)
 
         logger.info("Evaluating on development data")
-        entity_scores = self.evaluate(sess, dev_processed, dev)
+        entity_scores = self._evaluate(sess, dev, dev_labels)
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
 
         # with open(self.config.eval_output, 'a') as f:
@@ -191,16 +186,18 @@ class Model(object):
         f1 = entity_scores[-2]
         return f1
 
-    def fit(self, sess, saver, train, dev):
+    def fit(self, sess, saver, train_raw, dev_raw):
         best_score = 0.
 
         # Padded sentences
-        train_processed = self.preprocess_sequence_data(train) # sent1, sent2, label
-        dev_processed = self.preprocess_sequence_data(dev)
+        train = self.preprocess_sequence_data(train_raw)
+        train_labels = [label for sentence1, sentence2, label in train_raw]
+        dev = self.preprocess_sequence_data(dev_raw)
+        dev_labels = [label for sentence1, sentence2, label in dev_raw]
 
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
-            score = self.run_epoch(sess, train_processed, dev_processed, train, dev)
+            score = self._run_epoch(sess, train, train_labels, dev, dev_labels)
             if score > best_score:
                 best_score = score
                 if saver:
@@ -212,7 +209,7 @@ class Model(object):
                 self.report.save()
         return best_score
 
-    def build(self):
+    def _build(self):
         self.add_placeholders()
         self.pred = self.add_prediction_op()
         self.loss = self.add_loss_op(self.pred)
@@ -228,4 +225,4 @@ class Model(object):
         self.config.max_length = self.max_length # Just in case people make a mistake.
         self.pretrained_embeddings = pretrained_embeddings
 
-        self.build()
+        self._build()
