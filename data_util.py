@@ -95,7 +95,7 @@ class ModelHelper(object):
             tok2id, max_length = pickle.load(f)
         return cls(tok2id, max_length)
 
-def load_and_preprocess_data(args, add_end_token=True):
+def load_and_preprocess_data(args, add_end_token=False):
     logger.info("Loading training data...")
     train_q1 = read_dat(args.data_train1)
     train_q2 = read_dat(args.data_train2)
