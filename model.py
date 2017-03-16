@@ -184,7 +184,8 @@ class Model(object):
             f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[0], entity_scores[0], train_entity_scores[3], entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2]))
 
         f1 = entity_scores[-2]
-        return f1
+        acc = entity_scores[0]
+        return acc
 
     def fit(self, sess, saver, train_raw, dev_raw):
         best_score = 0.
