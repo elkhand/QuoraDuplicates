@@ -13,7 +13,7 @@ class Config:
     n_epochs = 1000
     lr = 0.0006#0.0003 F1: 76 Acc: 83
     lr_decay_rate = 0.1
-    embeddings_trainable = True#False
+    embeddings_trainable = True
     pos_weight = 1.7
     beta = 0.1
     

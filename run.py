@@ -23,8 +23,13 @@ from attention_model import AttentionModel
 from siamese_model import SiameseModel
 from bow_model import BOWModel
 import imp
+import matplotlib
+matplotlib.use('agg')
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import itertools
 
-logger = logging.getLogger("hw3.q2")
+logger = logging.getLogger("FinalProject")
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
@@ -89,12 +94,12 @@ def do_evaluate(args):
     print args.model_path, args.config
 
     helper = ModelHelper.load(args.model_path)
-    dev_q1 = read_dat(args.data_dev1)
-    dev_q2 = read_dat(args.data_dev2)
-    dev_lab = read_lab(args.data_dev_labels)
-    dev_dat1 = helper.vectorize(dev_q1)
-    dev_dat2 = helper.vectorize(dev_q2)
-    dev_raw = zip(dev_dat1, dev_dat2, dev_lab)
+    test_q1 = read_dat(args.data_test1)
+    test_q2 = read_dat(args.data_test2)
+    test_lab = read_lab(args.data_test_labels)
+    test_dat1 = helper.vectorize(test_q1)
+    test_dat2 = helper.vectorize(test_q2)
+    test_raw = zip(test_dat1, test_dat2, test_lab)
 
     embeddings = load_embeddings(args, helper)
     config.embed_size = embeddings.shape[1]
@@ -111,8 +116,12 @@ def do_evaluate(args):
         with tf.Session() as session:
             session.run(init)
             saver.restore(session, model.config.model_output)
-            dev_scores = model.evaluate(session, dev_raw)
-            print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % dev_scores
+            test_scores = model.evaluate(session, test_raw)
+            labels = test_scores[-1]
+            preds = test_scores[-2]
+            test_scores = test_scores[:5]
+            print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % test_scores
+            outputConfusionMatrix(labels,preds, "confusionMatrix.png")
 
 def do_shell(args):
 
@@ -164,6 +173,27 @@ input2> Are cats better than people ?
                     print("Closing session.")
                     break
 
+def outputConfusionMatrix(labels, preds, filename):
+    """ Generate a confusion matrix """
+    cm = confusion_matrix(labels, preds, labels=range(2))
+    plt.figure()
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Reds)
+    plt.colorbar()
+    classes = ["Same", "Different"]
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes)
+    plt.yticks(tick_marks, classes)
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, cm[i, j],
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.savefig(filename, bbox_inches = 'tight')
+
+
 def model_class(model_name):
     if model_name == "attention":
         return AttentionModel
@@ -197,9 +227,9 @@ if __name__ == "__main__":
 
     command_parser = subparsers.add_parser('evaluate', help='')
     command_parser.add_argument('-m', '--model', type=model_class, required=True, help="Model to use.")
-    command_parser.add_argument('-dd1', '--data-dev1', dest='data_dev1', type=argparse.FileType('r'))
-    command_parser.add_argument('-dd2', '--data-dev2', dest='data_dev2', type=argparse.FileType('r'))
-    command_parser.add_argument('-ddl', '--data-dev-labels', dest='data_dev_labels', type=argparse.FileType('r'))
+    command_parser.add_argument('-de1', '--data-test1', dest='data_test1', type=argparse.FileType('r'))
+    command_parser.add_argument('-de2', '--data-test2', dest='data_test2', type=argparse.FileType('r'))
+    command_parser.add_argument('-ddl', '--data-test-labels', dest='data_test_labels', type=argparse.FileType('r'))
     command_parser.add_argument('-mp', '--model-path', required=True, help="Training data")
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/vocab.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")

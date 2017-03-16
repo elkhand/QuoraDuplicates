@@ -131,7 +131,7 @@ class Model(object):
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
         acc = sum(labels==preds) / float(len(labels))
-        return (acc, p, r, f1, loss)
+        return (acc, p, r, f1, loss,labels, preds)
 
     def output(self, sess, inputs_raw):
         """
@@ -184,8 +184,7 @@ class Model(object):
             f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[0], entity_scores[0], train_entity_scores[3], entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2]))
 
         f1 = entity_scores[-2]
-        acc = entity_scores[0]
-        return acc
+        return f1
 
     def fit(self, sess, saver, train_raw, dev_raw):
         best_score = 0.
