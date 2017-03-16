@@ -177,6 +177,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Trains and tests an NER model')
     subparsers = parser.add_subparsers()
 
+    # Note: we are inputing the test data to the train process for the embeddings only, since we take the union of words in train,dev,test for tok2id.
+    # We are not inputing or using the test labels.
     command_parser = subparsers.add_parser('train', help='')
     command_parser.add_argument('-m', '--model', type=model_class, required=True, help="Model to use.")
     command_parser.add_argument('-dt1', '--data-train1', dest='data_train1', type=argparse.FileType('r'))
