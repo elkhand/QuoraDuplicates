@@ -121,7 +121,7 @@ def do_evaluate(args):
             preds = test_scores[-2]
             test_scores = test_scores[:5]
             print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % test_scores
-            outputConfusionMatrix(labels,preds, args.model+"-confusionMatrix.png")
+            outputConfusionMatrix(labels,preds, "confusionMatrix.png")
 
 def do_shell(args):
 
