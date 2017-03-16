@@ -121,7 +121,7 @@ def do_evaluate(args):
             preds = test_scores[-2]
             test_scores = test_scores[:5]
             print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % test_scores
-            outputConfusionMatrix(labels,preds, "confusionMatrix.png")
+            outputConfusionMatrix(labels,preds, args.model+"-confusionMatrix.png")
 
 def do_shell(args):
 
@@ -210,7 +210,7 @@ if __name__ == "__main__":
     # Note: we are inputing the test data to the train process for the embeddings only, since we take the union of words in train,dev,test for tok2id.
     # We are not inputing or using the test labels.
     command_parser = subparsers.add_parser('train', help='')
-    command_parser.add_argument('-m', '--model', type=model_class, required=True, help="Model to use.")
+    command_parser.add_argument('-m', '--model', dest='model', type=model_class, required=True, help="Model to use.")
     command_parser.add_argument('-dt1', '--data-train1', dest='data_train1', type=argparse.FileType('r'))
     command_parser.add_argument('-dt2', '--data-train2', dest='data_train2', type=argparse.FileType('r'))
     command_parser.add_argument('-dtl', '--data-train-labels', dest='data_train_labels', type=argparse.FileType('r'))
@@ -226,7 +226,7 @@ if __name__ == "__main__":
     command_parser.set_defaults(func=do_train)
 
     command_parser = subparsers.add_parser('evaluate', help='')
-    command_parser.add_argument('-m', '--model', type=model_class, required=True, help="Model to use.")
+    command_parser.add_argument('-m', '--model', dest='model', type=model_class, required=True, help="Model to use.")
     command_parser.add_argument('-de1', '--data-test1', dest='data_test1', type=argparse.FileType('r'))
     command_parser.add_argument('-de2', '--data-test2', dest='data_test2', type=argparse.FileType('r'))
     command_parser.add_argument('-ddl', '--data-test-labels', dest='data_test_labels', type=argparse.FileType('r'))
@@ -238,7 +238,7 @@ if __name__ == "__main__":
     command_parser.set_defaults(func=do_evaluate)
 
     command_parser = subparsers.add_parser('shell', help='')
-    command_parser.add_argument('-m', '--model', type=model_class, required=True, help="Model to use.")
+    command_parser.add_argument('-m', '--model', dest='model', type=model_class, required=True, help="Model to use.")
     command_parser.add_argument('-mp', '--model-path', required=True, help="Training data")
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/vocab.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")
