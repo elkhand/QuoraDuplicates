@@ -171,10 +171,12 @@ class Model(object):
         logger.info("Evaluating on training data: 10k sample")
         n_train_evaluate = 10000
         train_entity_scores = self._evaluate(sess, train[:n_train_evaluate], train_labels[:n_train_evaluate])
+        train_entity_scores = train_entity_scores[:5]
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *train_entity_scores)
 
         logger.info("Evaluating on development data")
         entity_scores = self._evaluate(sess, dev, dev_labels)
+        entity_scores = entity_scores[:5]
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
 
         # with open(self.config.eval_output, 'a') as f:
