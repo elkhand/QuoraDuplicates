@@ -221,7 +221,7 @@ if __name__ == "__main__":
     command_parser.add_argument('-de2', '--data-test2', dest='data_test2', type=argparse.FileType('r'))
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/glvocab_1_100.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/glwordvectors_1_100.txt", help="Path to word vectors file")
-    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', default=100)
+    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', type=int, default=100)
     command_parser.add_argument('-cfg', '--config', required=True)
     command_parser.set_defaults(func=do_train)
 
@@ -233,7 +233,7 @@ if __name__ == "__main__":
     command_parser.add_argument('-mp', '--model-path', required=True, help="Training data")
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/vocab.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")
-    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', default=100)
+    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', type=int, default=100)
     command_parser.add_argument('-cfg', '--config', required=True)
     command_parser.set_defaults(func=do_evaluate)
 
@@ -242,7 +242,7 @@ if __name__ == "__main__":
     command_parser.add_argument('-mp', '--model-path', required=True, help="Training data")
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/vocab.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")
-    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', default=100)
+    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', type=int, default=100)
     command_parser.add_argument('-cfg', '--config', required=True)
     command_parser.set_defaults(func=do_shell)
 
