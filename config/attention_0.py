@@ -13,14 +13,14 @@ class Config:
     max_length = 35 # longest sequence to parse
     n_classes = 2
     dropout = 0.7
-    hidden_size = 200
+    hidden_size = 64
     batch_size = 100
     n_epochs = 100
     max_grad_norm = 10.
-    lr = 0.0001
+    lr = 0.001
     lr_decay_rate = 0.9
-    uses_attention = True #wbw attention
-    score_type2 = True
+    uses_attention = True
+    score_type2 = False
     embeddings_trainable = True
     pos_weight = 1.7
 

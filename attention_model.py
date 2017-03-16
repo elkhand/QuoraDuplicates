@@ -265,7 +265,7 @@ class AttentionModel(Model):
         starter_learning_rate = self.config.lr
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
                                                    200000, self.config.lr_decay_rate, staircase=True)
-        optimizer = tf.train.AdadeltaOptimizer(learning_rate=learning_rate)
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
         grads_and_vars = optimizer.compute_gradients(loss)
         grads, grad_vars = zip(*grads_and_vars)
         grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.config.max_grad_norm)
