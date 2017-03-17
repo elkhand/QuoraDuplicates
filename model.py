@@ -167,7 +167,7 @@ class Model(object):
             preds_, loss_, prob_ = self._predict_on_batch(sess, batch)
             preds += list(preds_)
             loss_record.append(loss_)
-            probs.extend(prob_)
+            probs += list(prob_)
             prog.update(i + 1, [])
         return preds, np.mean(loss_record), probs
 
