@@ -29,7 +29,7 @@ class Config:
         self.model_output = self.output_path + "model.weights"
         self.eval_output = self.output_path + "results.txt"
         self.dev_prob_output = self.output_path + "dev_pred_probs.txt"
-        self.isEnsembleOn = True
+        self.isEnsembleOn = False
         if self.isEnsembleOn:
             self.attention_dev_prob_output = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/dev_pred_probs.txt"
         

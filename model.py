@@ -123,8 +123,8 @@ class Model(object):
         #---Ensemble part
         if self.config.isEnsembleOn and isDev:
             otherModelPreds=[]
-            thisPreds = probs
-            thisPreds = self.softmax(thisPreds[0])
+            thisPreds = np.array(probs)
+            thisPreds = self.softmax(thisPreds)
             with open(self.config.attention_dev_prob_output, 'r') as f:
                 otherModelPreds = np.loadtxt(f)
             otherModelPreds = otherModelPreds[self.epochNum*len(labels):(self.epochNum+1)*len(labels)]
@@ -161,10 +161,10 @@ class Model(object):
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
         for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
             # batch = batch[:4] # ignore label
-            preds_, loss_, prob_ = self._predict_on_batch(sess, batch)
+            preds_, loss_, probs_ = self._predict_on_batch(sess, batch)
             preds += list(preds_)
             loss_record.append(loss_)
-            probs.append(prob_)
+            probs += list(probs_)
             prog.update(i + 1, [])
         return preds, np.mean(loss_record), probs
 
@@ -196,28 +196,15 @@ class Model(object):
         devProbs =  entity_scores[5]
         entity_scores = entity_scores[:5]
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
-        print "DevProbs: len: ", len(devProbs)
         prob_predSM = self.softmax(devProbs[0])
-        #print "DevProbsSM: ", prob_predSM
-        print "Total written: ", len(prob_predSM)
-        # with open(self.config.eval_output, 'a') as f:
-        #     f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2], entity_scores[3]))
+
 
         with open(self.config.eval_output, 'a') as f:
             f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[0], entity_scores[0], train_entity_scores[3], entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2]))
 
-        with open(self.config.dev_prob_output, 'a') as f:
-            #np.savetxt(f, np.column_stack(prob_predSM), fmt='%1.10f')            
+        with open(self.config.dev_prob_output, 'a') as f:    
             np.savetxt(f, prob_predSM, fmt='%1.10f', delimiter=' ', newline='\n')
 
-        
-
-
-        # with open(self.config.dev_prob_output, 'r') as f:
-        #     rd = np.loadtxt(f)
-        #     print "\nRD: "
-        #     print rd
-        #     print "\n"
         f1 = entity_scores[-2]
         return f1
 
