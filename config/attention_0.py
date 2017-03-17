@@ -35,7 +35,7 @@ class Config:
         self.model_output = self.output_path + "model.weights"
         self.eval_output = self.output_path + "results.txt"
         self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
-
+        self.isEnsembleOn = False
         self.log_output = self.output_path + "log"
 
         self.embed_size = int(args.embed_size)

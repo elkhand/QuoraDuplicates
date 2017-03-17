@@ -3,6 +3,7 @@ from __future__ import division
 
 import tensorflow as tf
 import numpy as np
+import os
 
 from model import Model
 
@@ -100,6 +101,7 @@ class SiameseModel(Model):
     def add_exact_prediction_op(self, preds):
         pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
         return tf.greater(tf.sigmoid(preds[:, 1]), pos_thres)
+
 
     def add_loss_op(self, preds):
         """Adds Ops for the loss function to the computational graph.
