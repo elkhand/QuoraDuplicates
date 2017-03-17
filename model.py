@@ -164,10 +164,10 @@ class Model(object):
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
         for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
             # batch = batch[:4] # ignore label
-            preds_, loss_, prob_ = self._predict_on_batch(sess, batch)
+            preds_, loss_, probs_ = self._predict_on_batch(sess, batch)
             preds += list(preds_)
             loss_record.append(loss_)
-            probs += list(prob_)
+            probs += list(probs_)
             prog.update(i + 1, [])
         return preds, np.mean(loss_record), probs
 
