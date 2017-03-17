@@ -123,8 +123,11 @@ class Model(object):
         #---Ensemble part
         if self.config.isEnsembleOn and isDev:
             otherModelPreds=[]
-            thisPreds = probs
-            thisPreds = self.softmax(thisPreds[0])
+            thisPreds = np.array(probs)
+            # print "len(probs): ", len(thisPreds)
+            # print "probs: ",thisPreds
+            # print "probs[0]: ", thisPreds[0]
+            thisPreds = self.softmax(thisPreds)
             with open(self.config.attention_dev_prob_output, 'r') as f:
                 otherModelPreds = np.loadtxt(f)
             otherModelPreds = otherModelPreds[self.epochNum*len(labels):(self.epochNum+1)*len(labels)]
@@ -164,7 +167,7 @@ class Model(object):
             preds_, loss_, prob_ = self._predict_on_batch(sess, batch)
             preds += list(preds_)
             loss_record.append(loss_)
-            probs.append(prob_)
+            probs.extend(prob_)
             prog.update(i + 1, [])
         return preds, np.mean(loss_record), probs
 

@@ -9,7 +9,7 @@ class Config:
     dropout = 0.5
     hidden_size = 1100
     second_hidden_size = 800
-    batch_size = 100
+    batch_size = 20
     n_epochs = 1000
     lr = 0.0006#0.0003 F1: 76 Acc: 83
     lr_decay_rate = 0.1
@@ -29,7 +29,7 @@ class Config:
         self.model_output = self.output_path + "model.weights"
         self.eval_output = self.output_path + "results.txt"
         self.dev_prob_output = self.output_path + "dev_pred_probs.txt"
-        self.isEnsembleOn = True
+        self.isEnsembleOn = False
         if self.isEnsembleOn:
             self.attention_dev_prob_output = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/dev_pred_probs.txt"
         
