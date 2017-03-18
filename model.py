@@ -123,7 +123,7 @@ class Model(object):
         
         if isDev:
             # store dev prediction probabilities
-            prob_predSM = self.softmax(probs)
+            prob_predSM = self.softmax(np.array(probs))
             with open(self.config.dev_prob_output, 'a') as f:    
                 np.savetxt(f, prob_predSM, fmt='%1.10f', delimiter=' ', newline='\n')
 
