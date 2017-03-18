@@ -120,6 +120,13 @@ class Model(object):
         preds, loss, probs = self._output(sess, inputs)
         labels = np.array(labels, dtype=np.float32)
         preds = np.array(preds)
+        
+        if isDev:
+            # store dev prediction probabilities
+            prob_predSM = self.softmax(probs)
+            with open(self.config.dev_prob_output, 'a') as f:    
+                np.savetxt(f, prob_predSM, fmt='%1.10f', delimiter=' ', newline='\n')
+
         #---Ensemble part
         if self.config.isEnsembleOn and isDev:
             otherModelPreds=[]
@@ -196,14 +203,9 @@ class Model(object):
         devProbs =  entity_scores[5]
         entity_scores = entity_scores[:5]
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
-        prob_predSM = self.softmax(devProbs)
-
 
         with open(self.config.eval_output, 'a') as f:
             f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[0], entity_scores[0], train_entity_scores[3], entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2]))
-
-        with open(self.config.dev_prob_output, 'a') as f:    
-            np.savetxt(f, prob_predSM, fmt='%1.10f', delimiter=' ', newline='\n')
 
         f1 = entity_scores[-2]
         return f1
