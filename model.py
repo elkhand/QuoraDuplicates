@@ -129,13 +129,13 @@ class Model(object):
 
         #---Ensemble part
         if self.config.isEnsembleOn and isDev:
-            otherModelPreds=[]
-            thisPreds = np.array(probs)
-            thisPreds = self.softmax(thisPreds)
+            otherModelProbs=[]
+            thisProbs = np.array(probs)
+            thisProbs = self.softmax(thisProbs)
             with open(self.config.attention_dev_prob_output, 'r') as f:
-                otherModelPreds = np.loadtxt(f)
-            otherModelPreds = otherModelPreds[self.epochNum*len(labels):(self.epochNum+1)*len(labels)]
-            sumOfProbs = np.add(thisPreds, otherModelPreds)
+                otherModelProbs = np.loadtxt(f)
+            otherModelProbs = otherModelProbs[self.epochNum*len(labels):(self.epochNum+1)*len(labels)]
+            sumOfProbs = np.add(thisProbs, otherModelProbs)
             avgOfProbs = np.divide(sumOfProbs,2.0)
             newPreds = [0 if diff > same else 1 for diff,same in avgOfProbs]
             preds = newPreds
