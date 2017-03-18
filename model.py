@@ -114,7 +114,7 @@ class Model(object):
         """Evaluates model performance on @examples."""
         inputs = self.preprocess_sequence_data(inputs_raw)
         labels = [label for sentence1, sentence2, label in inputs_raw]
-        return self._evaluate(sess, inputs, labels)
+        return self._evaluate(sess, inputs, labels, isDev=True)
 
     def _evaluate(self, sess, inputs, labels, isDev=False):
         preds, loss, probs = self._output(sess, inputs)
