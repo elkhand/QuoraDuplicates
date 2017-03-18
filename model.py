@@ -196,7 +196,7 @@ class Model(object):
         devProbs =  entity_scores[5]
         entity_scores = entity_scores[:5]
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
-        prob_predSM = self.softmax(devProbs[0])
+        prob_predSM = self.softmax(devProbs)
 
 
         with open(self.config.eval_output, 'a') as f:
