@@ -18,13 +18,13 @@ python run.py train \
 -ddl data/labels_dev.conll \
 -de1 data/dat_test_a.conll \
 -de2 data/dat_test_b.conll \
--v data/glvocab_1_100.txt \
+-v data/glvocab_1.txt \
 -vv data/glwordvectors_1_100.txt \
 -eb 100 \
 -cfg config/attention_0.py
 ```
 
-Running Simaese model:
+Training Siamese model:
 
 ```
 python run.py train \
@@ -37,18 +37,32 @@ python run.py train \
 -ddl data/labels_dev.conll \
 -de1 data/dat_test_a.conll \
 -de2 data/dat_test_b.conll \
--v data/glvocab_300.txt \
+-v data/glvocab_1.txt \
 -vv data/glwordvectors_1_300.txt \
--eb 100 \
+-eb 300 \
 -cfg config/siamese_0.py
+```
+
+Evaluating Siamese model:
+```
+python run.py evaluate \
+-de1 data/dat_test_a.conll \
+-de2 data/dat_test_b.conll \
+-ddl data/labels_test.conll \
+-v data/glvocab_1.txt \
+-vv data/glwordvectors_1_300.txt \
+-eb 300 \
+-m siamese \
+-cfg config/siamese_0.py \
+-mp results/lstm/20170316_101730/
 ```
 
 Running sendEmail.py script:
 
 ```
-python sendEmail.py elkhan.dadashov@gmail.com /home/elkhand/QuoraDuplicates/exp_march9_relu_pred.txt
+python sendEmail.py elkhan.dadashov@gmail.com /home/elkhand/QuoraDuplicates/exp_march9_relu_pred.txt "exp1 beta=xx"
 
-python sendEmail.py <your_email> <path_to_file_to_be_attached_to_email>
+python sendEmail.py <your_email> <path_to_file_to_be_attached_to_email> <some_string_to_be_attached_to_subject>
 ```
 
 

@@ -11,10 +11,10 @@ class Config:
     """
     n_word_features = 1 # Number of features for every word in the input.
     n_features = n_word_features # Number of features for every word in the input.
-    max_length = 35 # longest sequence to parse
+    max_length = 40 # longest sequence to parse
     n_classes = 2
     dropout = 0.99
-    hidden_size = 1000
+    hidden_size = 512
     second_hidden_size = None
     batch_size = 100
     n_epochs = 100

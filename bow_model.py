@@ -1,29 +1,16 @@
-
 from __future__ import absolute_import
 from __future__ import division
-import logging
 
 import tensorflow as tf
 import numpy as np
 
-from util import Progbar, minibatches
 from model import Model
-
-logger = logging.getLogger("hw3.q2")
-logger.setLevel(logging.DEBUG)
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
-
 
 class BOWModel(Model):
     """
     Implements a recursive neural network with an embedding layer and
     single hidden layer.
     """
-    def build(self):
-        super(BOWModel, self).build()
-        pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
-        self.predictions = tf.greater(tf.sigmoid(self.pred), pos_thres)
-
     def add_placeholders(self):
         """Generates placeholder variables to represent the input tensors
 
@@ -52,20 +39,10 @@ class BOWModel(Model):
         self.dropout_placeholder = tf.placeholder(tf.float32, [])
 
     def create_feed_dict(self, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch=None, dropout=1):
-        """Creates the feed_dict for the dependency parser.
+        """Creates the feed_dict.
 
-        A feed_dict takes the form of:
+        Note: The signature of this function must match the return value of preprocess_sequence_data.
 
-        feed_dict = {
-                <placeholder>: <tensor of values to be passed for placeholder>,
-                ....
-        }
-
-        Args:
-            inputs_batch: A batch of input data.
-            mask_batch:   A batch of mask data.
-            labels_batch: A batch of label data.
-            dropout: The dropout rate.
         Returns:
             feed_dict: The feed dictionary mapping from placeholders to values.
         """
@@ -81,31 +58,6 @@ class BOWModel(Model):
         if labels_batch is not None:
             feed_dict.update({self.labels_placeholder: np.array(labels_batch, dtype=np.float32)})
         return feed_dict
-
-    def add_embedding(self, ind):
-        """Adds an embedding layer that maps from input tokens (integers) to vectors and then
-        concatenates those vectors:
-
-            - Create an embedding tensor and initialize it with self.pretrained_embeddings.
-            - Use the input_placeholder to index into the embeddings tensor, resulting in a
-              tensor of shape (None, max_length, n_features, embed_size).
-            - Concatenates the embeddings by reshaping the embeddings tensor to shape
-              (None, max_length, n_features * embed_size).
-
-        Returns:
-            embeddings: tf.Tensor of shape (None, max_length, n_features*embed_size)
-        """
-        if self.config.embeddings_trainable:
-            embeddings = tf.Variable(self.pretrained_embeddings)
-        else:
-            embeddings = self.pretrained_embeddings
-
-        if ind==1:
-            to_concat = tf.nn.embedding_lookup(embeddings, self.input1_placeholder)
-        if ind==2:
-            to_concat = tf.nn.embedding_lookup(embeddings, self.input2_placeholder)
-        embeddings = tf.reshape(to_concat, [-1, self.config.max_length, self.config.n_features* self.config.embed_size])
-        return embeddings
 
     def add_prediction_op(self):
         """Adds the unrolled RNN:
@@ -148,8 +100,8 @@ class BOWModel(Model):
         # bag of words mean and max over embeddings
         z1 = tf.reduce_sum(x1, 1) / tf.expand_dims(tf.reduce_sum(self.featmask1_placeholder, 1), 1) # (?, embed_size)
         z2 = tf.reduce_sum(x2, 1) / tf.expand_dims(tf.reduce_sum(self.featmask1_placeholder, 1), 1)
-        x1 = tf.reduce_max(x1, 1)
-        x2 = tf.reduce_max(x2, 1)
+        # x1 = tf.reduce_max(x1, 1)
+        # x2 = tf.reduce_max(x2, 1)
 
         # initialize variables
         xavier_init = tf.contrib.layers.xavier_initializer()
@@ -159,8 +111,8 @@ class BOWModel(Model):
         b = tf.get_variable("b2", initializer=xavier_init,  shape=[1,])
 
         # relu, dropout
-        h1 = tf.nn.relu(tf.matmul(z1, W1) + tf.matmul(x1, W2) + b1)
-        h2 = tf.nn.relu(tf.matmul(z2, W1) + tf.matmul(x2, W2) + b1)
+        h1 = tf.nn.relu(tf.matmul(z1, W1) +b1) # + tf.matmul(x1, W2) + b1)
+        h2 = tf.nn.relu(tf.matmul(z2, W1) +b1) # tf.matmul(x2, W2) + b1)
 
         if self.config.second_hidden_size is not None:
             U = tf.get_variable("U", shape = (1, self.config.second_hidden_size), initializer=xavier_init, dtype=tf.float32)
@@ -187,6 +139,10 @@ class BOWModel(Model):
                 preds = tf.reduce_sum(U * h1 * h2, 1) + b
 
         return preds
+
+    def add_exact_prediction_op(self, preds):
+        pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
+        return tf.greater(tf.sigmoid(preds), pos_thres)
 
     def add_loss_op(self, preds):
         """Adds Ops for the loss function to the computational graph.
@@ -232,140 +188,6 @@ class BOWModel(Model):
 
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
-
-
-    def predict_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch):
-        inputs1_batch = np.array(inputs1_batch)
-        inputs2_batch = np.array(inputs2_batch)
-        feed = self.create_feed_dict(inputs1_batch=inputs1_batch, inputs2_batch=inputs2_batch, seqlen1_batch=seqlen1_batch, seqlen2_batch=seqlen2_batch, featmask1_batch=featmask1_batch, featmask2_batch=featmask2_batch, labels_batch=labels_batch)
-
-        logits, predictions, loss = sess.run([self.pred, self.predictions, self.loss], feed_dict=feed)
-        return logits, predictions, loss
-
-    def evaluate(self, sess, examples, examples_raw):
-        #def evaluate(self, sess, examples, examples_raw):
-        """Evaluates model performance on @examples.
-
-        This function uses the model to predict labels for @examples and constructs a confusion matrix.
-
-        Args:
-            sess: the current TensorFlow session.
-            examples: A list of vectorized input/output pairs. Examples is padded.
-            examples: A list of the original input/output sequence pairs. Raw input,un-processed.
-        Returns:
-            The F1 score for predicting tokens as named entities.
-        """
-
-        (labels, preds, logits), loss = self.output(sess, examples_raw, examples) #*
-        labels, preds, logits = np.array(labels, dtype=np.float32), np.array(preds), np.array(logits)
-
-        correct_preds = np.logical_and(labels==1, preds==1).sum()
-        total_preds = float(np.sum(preds==1))
-        total_correct = float(np.sum(labels==1))
-
-        print correct_preds, total_preds, total_correct
-
-        p = correct_preds / total_preds if correct_preds > 0 else 0
-        r = correct_preds / total_correct if correct_preds > 0 else 0
-        f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        acc = sum(labels==preds) / float(len(labels))
-
-        return (acc, p, r, f1, loss)
-
-    def consolidate_predictions(self, examples_raw, examples_processed, preds, logits):
-        """Batch the predictions into groups of sentence length.
-        """
-        assert len(examples_raw) == len(examples_processed)
-        assert len(examples_raw) == len(preds)
-
-        labels = [x[2] for x in examples_raw]
-
-        return labels, preds, logits
-
-
-    def output(self, sess, inputs_raw, inputs=None):
-        """
-        Reports the output of the model on examples (uses helper to featurize each example).
-        """
-        if inputs is None:
-            inputs = self.preprocess_sequence_data(inputs_raw)
-
-        preds = []
-        logits = []
-        loss_record = []
-        prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
-        for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
-            # batch = batch[:4] # ignore label
-            logits_, preds_, loss_ = self.predict_on_batch(sess, *batch)
-            preds += list(preds_)
-            logits += list(logits_)
-            loss_record.append(loss_)
-            prog.update(i + 1, [])
-        return self.consolidate_predictions(inputs_raw, inputs, preds, logits), np.mean(loss_record)
-
-    def train_on_batch(self, sess, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch):
-        feed = self.create_feed_dict(inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, featmask1_batch, featmask2_batch, labels_batch=labels_batch, dropout=self.config.dropout)
-
-        _, pred, loss = sess.run([self.train_op, self.pred, self.loss], feed_dict=feed)
-        return loss
-
-    def run_epoch(self, sess, train_processed, dev_processed, train, dev):
-        prog = Progbar(target=1 + int(len(train_processed) / self.config.batch_size))
-        for i, batch in enumerate(minibatches(train_processed, self.config.batch_size)):
-            loss = self.train_on_batch(sess, *batch)
-            prog.update(i + 1, [("train loss", loss)])
-            if self.report: self.report.log_train_loss(loss)
-        print("")
-
-        logger.info("Evaluating on training data: 10k sample")
-        n_train_evaluate = 10000
-        train_entity_scores = self.evaluate(sess, train_processed[:n_train_evaluate], train[:n_train_evaluate])
-        logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *train_entity_scores)
-
-        logger.info("Evaluating on development data")
-        entity_scores = self.evaluate(sess, dev_processed, dev)
-        logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
-        with open(self.config.eval_output, 'a') as f:
-            f.write('%.4f %.4f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n' % (train_entity_scores[4], entity_scores[4], train_entity_scores[0], entity_scores[0], train_entity_scores[3], entity_scores[3], entity_scores[0], entity_scores[1], entity_scores[2]))
-
-
-        f1 = entity_scores[-2]
-        return f1
-
-    def fit(self, sess, saver, train, dev):
-        best_score = 0.
-
-        # Padded sentences
-        train_processed = self.preprocess_sequence_data(train) # sent1, sent2, label
-        dev_processed = self.preprocess_sequence_data(dev)
-
-        for epoch in range(self.config.n_epochs):
-            logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
-            score = self.run_epoch(sess, train_processed, dev_processed, train, dev)
-            if score > best_score:
-                best_score = score
-                if saver:
-                    logger.info("New best score! Saving model in %s", self.config.model_output)
-                    saver.save(sess, self.config.model_output)
-            print("")
-            if self.report:
-                self.report.log_epoch()
-                self.report.save()
-        return best_score
-
-
-    def __init__(self, helper, config, pretrained_embeddings, report=None):
-
-        self.helper = helper
-        self.config = config
-        self.report = report
-
-        self.max_length = min(config.max_length, helper.max_length)
-        config.max_length = self.max_length # Just in case people make a mistake.
-
-        self.pretrained_embeddings = pretrained_embeddings
-
-        self.build()
 
 
 def pad_sequences(data, max_length, n_features=1):
@@ -429,30 +251,3 @@ def pad_sequences(data, max_length, n_features=1):
         seqlen2 = min(len(sentence2), max_length)
         ret.append((feat_sent1, feat_sent2, seqlen1, seqlen2, feat_mask1, feat_mask2, label))
     return ret
-
-
-def test_pad_sequences():
-    print 'test_pad_sequences not implemented'
-    # Config.n_features = 2
-    # data = [
-    #     ([[4,1], [6,0], [7,0]], [1, 0, 0]),
-    #     ([[3,0], [3,4], [4,5], [5,3], [3,4]], [0, 1, 0, 2, 3]),
-    #     ]
-    # ret = [
-    #     ([[4,1], [6,0], [7,0], [0,0]], [1, 0, 0, 4], [True, True, True, False]),
-    #     ([[3,0], [3,4], [4,5], [5,3]], [0, 1, 0, 2], [True, True, True, True])
-    #     ]
-    #
-    # ret_ = pad_sequences(data, 4)
-    # assert len(ret_) == 2, "Did not process all examples: expected {} results, but got {}.".format(2, len(ret_))
-    # for i in range(2):
-    #     assert len(ret_[i]) == 3, "Did not populate return values corrected: expected {} items, but got {}.".format(3, len(ret_[i]))
-    #     for j in range(3):
-    #         assert ret_[i][j] == ret[i][j], "Expected {}, but got {} for {}-th entry of {}-th example".format(ret[i][j], ret_[i][j], j, i)
-
-def do_test1(_):
-    logger.info("Testing pad_sequences")
-    test_pad_sequences()
-    logger.info("Passed!")
-
-
