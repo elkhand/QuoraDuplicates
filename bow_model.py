@@ -100,8 +100,8 @@ class BOWModel(Model):
         # bag of words mean and max over embeddings
         z1 = tf.reduce_sum(x1, 1) / tf.expand_dims(tf.reduce_sum(self.featmask1_placeholder, 1), 1) # (?, embed_size)
         z2 = tf.reduce_sum(x2, 1) / tf.expand_dims(tf.reduce_sum(self.featmask1_placeholder, 1), 1)
-        # x1 = tf.reduce_max(x1, 1)
-        # x2 = tf.reduce_max(x2, 1)
+        x1 = tf.reduce_max(x1, 1)
+        x2 = tf.reduce_max(x2, 1)
 
         # initialize variables
         xavier_init = tf.contrib.layers.xavier_initializer()
@@ -111,8 +111,8 @@ class BOWModel(Model):
         b = tf.get_variable("b2", initializer=xavier_init,  shape=[1,])
 
         # relu, dropout
-        h1 = tf.nn.relu(tf.matmul(z1, W1) +b1) # + tf.matmul(x1, W2) + b1)
-        h2 = tf.nn.relu(tf.matmul(z2, W1) +b1) # tf.matmul(x2, W2) + b1)
+        h1 = tf.nn.relu(tf.matmul(z1, W1) + tf.matmul(x1, W2) + b1)
+        h2 = tf.nn.relu(tf.matmul(z2, W1) + tf.matmul(x2, W2) + b1)
 
         if self.config.second_hidden_size is not None:
             U = tf.get_variable("U", shape = (1, self.config.second_hidden_size), initializer=xavier_init, dtype=tf.float32)
@@ -188,7 +188,6 @@ class BOWModel(Model):
 
     def preprocess_sequence_data(self, examples):
         return pad_sequences(examples, self.max_length)
-
 
 def pad_sequences(data, max_length, n_features=1):
 

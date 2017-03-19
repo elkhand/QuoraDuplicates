@@ -101,9 +101,6 @@ def do_evaluate(args):
     test_dat2 = helper.vectorize(test_q2)
     test_raw = zip(test_dat1, test_dat2, test_lab)
 
-    q1_len = map(len, test_q1)
-    q2_len = map(len, test_q2)
-
     embeddings = load_embeddings(args, helper)
     config.embed_size = embeddings.shape[1]
 
@@ -119,51 +116,12 @@ def do_evaluate(args):
         with tf.Session() as session:
             session.run(init)
             saver.restore(session, model.config.model_output)
-
             test_scores = model.evaluate(session, test_raw)
             labels = test_scores[-1]
             preds = test_scores[-2]
             test_scores = test_scores[:5]
             print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % test_scores
             outputConfusionMatrix(labels,preds, "confusionMatrix.png")
-
-            # get predictions
-            inputs = model.preprocess_sequence_data(test_raw)
-            preds, logits, _ = model._output(session, inputs)
-            logits = np.array(logits)
-
-            # write out predictions with sent len
-            dat_analysis = np.column_stack((logits, np.array(test_lab), np.array(q1_len), np.array(q2_len)))
-            # print dat_analysis[:5,:]
-            print dat_analysis.shape
-            print 'saving prediction data to %s' % (model.config.output_path+'pred_with_len.txt')
-            np.savetxt(model.config.output_path+'pred_with_len', dat_analysis)
-
-            # take examples
-            n_example = 50
-            if len(logits.shape) == 2:
-                logits = np.array(logits)[:,1]
-            dev_lab = np.array(test_lab)
-            if len(logits.shape)==2:
-                logits = logits[:,1]
-            print logits.shape
-
-            pos_idx = np.where(dev_lab==1)[0]
-            pos_high_loss_idx = pos_idx[np.argsort(logits[pos_idx])[:n_example]]
-
-            neg_idx = np.where(dev_lab==0)[0]
-            neg_high_loss_idx = neg_idx[np.argsort(-logits[neg_idx])[:n_example]]
-
-            for idx in pos_high_loss_idx:
-                print ' '.join(test_q1[idx])
-                print ' '.join(test_q2[idx])
-                print dev_lab[idx], preds[idx], '\n'
-
-            for idx in neg_high_loss_idx:
-                print ' '.join(test_q1[idx])
-                print ' '.join(test_q2[idx])
-                print dev_lab[idx], preds[idx], '\n'
-
 
 def do_shell(args):
 
