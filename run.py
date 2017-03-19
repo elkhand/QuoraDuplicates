@@ -96,6 +96,9 @@ def do_evaluate(args):
     dev_dat2 = helper.vectorize(dev_q2)
     dev_raw = zip(dev_dat1, dev_dat2, dev_lab)
 
+    q1_len = map(len, dev_q1)
+    q2_len = map(len, dev_q2)
+
     embeddings = load_embeddings(args, helper)
     config.embed_size = embeddings.shape[1]
 
@@ -111,8 +114,48 @@ def do_evaluate(args):
         with tf.Session() as session:
             session.run(init)
             saver.restore(session, model.config.model_output)
+
+            # score
             dev_scores = model.evaluate(session, dev_raw)
             print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % dev_scores
+
+            # get predictions
+            inputs = model.preprocess_sequence_data(dev_raw)
+            preds, logits, _ = model._output(session, inputs)
+            logits = np.array(logits)
+
+            # write out predictions with sent len
+            dat_analysis = np.column_stack((logits, np.array(dev_lab), np.array(q1_len), np.array(q2_len)))
+            # print dat_analysis[:5,:]
+            print dat_analysis.shape
+            print 'saving prediction data to %s' % (model.config.output_path+'pred_with_len.txt')
+            np.savetxt(model.config.output_path+'pred_with_len', dat_analysis)
+
+            # take examples
+            n_example = 50
+            if len(logits.shape) == 2:
+                logits = np.array(logits)[:,1]
+            dev_lab = np.array(dev_lab)
+            if len(logits.shape)==2:
+                logits = logits[:,1]
+            print logits.shape
+
+            pos_idx = np.where(dev_lab==1)[0]
+            pos_high_loss_idx = pos_idx[np.argsort(logits[pos_idx])[:n_example]]
+
+            neg_idx = np.where(dev_lab==0)[0]
+            neg_high_loss_idx = neg_idx[np.argsort(-logits[neg_idx])[:n_example]]
+
+            for idx in pos_high_loss_idx:
+                print ' '.join(dev_q1[idx])
+                print ' '.join(dev_q2[idx])
+                print dev_lab[idx], preds[idx], '\n'
+
+            for idx in neg_high_loss_idx:
+                print ' '.join(dev_q1[idx])
+                print ' '.join(dev_q2[idx])
+                print dev_lab[idx], preds[idx], '\n'
+
 
 def do_shell(args):
 
