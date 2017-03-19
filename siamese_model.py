@@ -3,6 +3,7 @@ from __future__ import division
 
 import tensorflow as tf
 import numpy as np
+import os
 
 from model import Model
 
@@ -14,7 +15,7 @@ class SiameseModel(Model):
     def add_placeholders(self):
         self.input1_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.input2_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
-        self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,2))
+        self.labels_placeholder = tf.placeholder(tf.float32, (None, 2))
         self.seqlen1_placeholder = tf.placeholder(tf.int32, (None,))
         self.seqlen2_placeholder = tf.placeholder(tf.int32, (None,))
         self.dropout_placeholder = tf.placeholder(tf.float32, [])
@@ -30,33 +31,17 @@ class SiameseModel(Model):
         feed_dict = {
             self.input1_placeholder: inputs1_batch,
             self.input2_placeholder: inputs2_batch,
-            self.seqlen1_placeholder : seqlen1_batch,
-            self.seqlen2_placeholder : seqlen2_batch,
+            self.seqlen1_placeholder: seqlen1_batch,
+            self.seqlen2_placeholder: seqlen2_batch,
             self.dropout_placeholder: dropout
         }
         if labels_batch is not None:
-            sp_labels = []
-            for l in labels_batch:
-                if l==0:
-                    sp_labels.append([1,0])
-                else:
-                    sp_labels.append([0,1])
-            sp_labels= np.array(sp_labels,dtype=np.float32)
+            sp_labels = [(1, 0) if l == 0 else (0, 1) for l in labels_batch]
+            sp_labels = np.array(sp_labels, dtype=np.float32)
             feed_dict.update({self.labels_placeholder: sp_labels})
         return feed_dict
 
     def add_prediction_op(self):
-        """Adds the unrolled RNN:
-
-        Remember:
-            * Use the xavier initilization for matrices.
-            * Note that tf.nn.dropout takes the keep probability (1 - p_drop) as an argument.
-            The keep probability should be set to the value of self.dropout_placeholder
-
-        Returns:
-            pred: tf.Tensor of shape (batch_size, max_length, n_classes)
-        """
-
         x1 = self.add_embedding(1)
         x2 = self.add_embedding(2)
         dropout_rate = self.dropout_placeholder
@@ -76,10 +61,10 @@ class SiameseModel(Model):
         
         m = self.config.second_hidden_size
         with tf.variable_scope("HiddenLayerVars"):
-            b1 = tf.get_variable("b1",initializer=xavier_init,  shape=[1, m])
-            b2 = tf.get_variable("b2",initializer=xavier_init,  shape=[1,2])
-            W1 = tf.get_variable("W1",initializer=xavier_init, shape=[3*self.config.hidden_size+1, m])
-            W2 = tf.get_variable("W2",initializer=xavier_init, shape=[m, 2])
+            b1 = tf.get_variable("b1", initializer=xavier_init, shape=[1, m])
+            b2 = tf.get_variable("b2", initializer=xavier_init, shape=[1, 2])
+            W1 = tf.get_variable("W1", initializer=xavier_init, shape=[3*self.config.hidden_size+1, m])
+            W2 = tf.get_variable("W2", initializer=xavier_init, shape=[m, 2])
             tf.get_variable_scope().reuse_variables()
 
         # Initialize state as vector of zeros.
@@ -89,33 +74,34 @@ class SiameseModel(Model):
         h2 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
         c2 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
         with tf.variable_scope("LSTM"):
-            Y, (c1, h1) = tf.nn.dynamic_rnn(cell, x1, initial_state=LSTMStateTuple(c1, h1), sequence_length=self.seqlen1_placeholder)
+            _, (c1, h1) = tf.nn.dynamic_rnn(cell, x1, initial_state=LSTMStateTuple(c1, h1), sequence_length=self.seqlen1_placeholder)
             #h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
             tf.get_variable_scope().reuse_variables()
-            Y, (c2, h2) = tf.nn.dynamic_rnn(cell, x2, initial_state=LSTMStateTuple(c2, h2), sequence_length=self.seqlen2_placeholder)
+            _, (c2, h2) = tf.nn.dynamic_rnn(cell, x2, initial_state=LSTMStateTuple(c2, h2), sequence_length=self.seqlen2_placeholder)
             #h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
 
         h_sub = tf.subtract(h1, h2)
         sqdiff_12 = tf.square(h_sub)
         sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
         h_dist = tf.reshape(sqdist_12, [batch_size,1])
-        h_mul =  tf.multiply(h1 , h2) 
+        h_mul = tf.multiply(h1, h2)
         if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
             h_combined = tf.concat([h1, h2, h_dist, h_mul], 1) # 3*hidden_size+1
         else:
             h_combined = tf.concat(1, [h1, h2, h_dist, h_mul]) # 3*hidden_size+1
         #h_combined_drop = tf.nn.dropout(h_combined, keep_prob=dropout_rate)
 
-        e1 = tf.matmul(h_combined, W1) + b1 # [bath_size,m]
+        e1 = tf.matmul(h_combined, W1) + b1 # [batch_size, m]
         e1_relu = tf.nn.relu(e1)
         e1_drop = tf.nn.dropout(e1_relu, keep_prob=dropout_rate)
-        preds = tf.matmul(e1_drop,W2) + b2
+        preds = tf.matmul(e1_drop, W2) + b2
 
         return preds
 
     def add_exact_prediction_op(self, preds):
         pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
         return tf.greater(tf.sigmoid(preds[:, 1]), pos_thres)
+
 
     def add_loss_op(self, preds):
         """Adds Ops for the loss function to the computational graph.
@@ -131,37 +117,15 @@ class SiameseModel(Model):
         """
         
         m = self.config.second_hidden_size
-        xavier_init = tf.contrib.layers.xavier_initializer()
         loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=1.675))       
         with tf.variable_scope("HiddenLayerVars", reuse=True):
-            b1 = tf.get_variable("b1",initializer=xavier_init,  shape=[1, m])
-            b2 = tf.get_variable("b2",initializer=xavier_init,  shape=[1,2])
-            W1 = tf.get_variable("W1",initializer=xavier_init, shape=[3*self.config.hidden_size+1, m])
-            W2 = tf.get_variable("W2",initializer=xavier_init, shape=[m, 2])
-            tf.get_variable_scope().reuse_variables()
+            W1 = tf.get_variable("W1")
+            W2 = tf.get_variable("W2")
         loss = loss + self.config.beta*tf.nn.l2_loss(W1)+ self.config.beta*tf.nn.l2_loss(W2)
 
         return loss
 
     def add_training_op(self, loss):
-        """Sets up the training Ops.
-
-        Creates an optimizer and applies the gradients to all trainable variables.
-        The Op returned by this function is what must be passed to the
-        `sess.run()` call to cause the model to train. See
-
-        https://www.tensorflow.org/versions/r0.7/api_docs/python/train.html#Optimizer
-
-        for more information.
-
-        Use tf.train.AdamOptimizer for this model.
-        Calling optimizer.minimize() will return a train_op object.
-
-        Args:
-            loss: Loss tensor, from cross_entropy_loss.
-        Returns:
-            train_op: The Op for training.
-        """
         global_step = tf.Variable(0, name='global_step', trainable=False)
         starter_learning_rate = self.config.lr
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,

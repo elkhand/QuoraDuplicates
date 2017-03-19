@@ -23,8 +23,13 @@ from attention_model import AttentionModel
 from siamese_model import SiameseModel
 from bow_model import BOWModel
 import imp
+import matplotlib
+matplotlib.use('agg')
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import itertools
 
-logger = logging.getLogger("hw3.q2")
+logger = logging.getLogger("FinalProject")
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
@@ -89,15 +94,15 @@ def do_evaluate(args):
     print args.model_path, args.config
 
     helper = ModelHelper.load(args.model_path)
-    dev_q1 = read_dat(args.data_dev1)
-    dev_q2 = read_dat(args.data_dev2)
-    dev_lab = read_lab(args.data_dev_labels)
-    dev_dat1 = helper.vectorize(dev_q1)
-    dev_dat2 = helper.vectorize(dev_q2)
-    dev_raw = zip(dev_dat1, dev_dat2, dev_lab)
+    test_q1 = read_dat(args.data_test1)
+    test_q2 = read_dat(args.data_test2)
+    test_lab = read_lab(args.data_test_labels)
+    test_dat1 = helper.vectorize(test_q1)
+    test_dat2 = helper.vectorize(test_q2)
+    test_raw = zip(test_dat1, test_dat2, test_lab)
 
-    q1_len = map(len, dev_q1)
-    q2_len = map(len, dev_q2)
+    q1_len = map(len, test_q1)
+    q2_len = map(len, test_q2)
 
     embeddings = load_embeddings(args, helper)
     config.embed_size = embeddings.shape[1]
@@ -115,17 +120,20 @@ def do_evaluate(args):
             session.run(init)
             saver.restore(session, model.config.model_output)
 
-            # score
-            dev_scores = model.evaluate(session, dev_raw)
-            print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % dev_scores
+            test_scores = model.evaluate(session, test_raw)
+            labels = test_scores[-1]
+            preds = test_scores[-2]
+            test_scores = test_scores[:5]
+            print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % test_scores
+            outputConfusionMatrix(labels,preds, "confusionMatrix.png")
 
             # get predictions
-            inputs = model.preprocess_sequence_data(dev_raw)
+            inputs = model.preprocess_sequence_data(test_raw)
             preds, logits, _ = model._output(session, inputs)
             logits = np.array(logits)
 
             # write out predictions with sent len
-            dat_analysis = np.column_stack((logits, np.array(dev_lab), np.array(q1_len), np.array(q2_len)))
+            dat_analysis = np.column_stack((logits, np.array(test_lab), np.array(q1_len), np.array(q2_len)))
             # print dat_analysis[:5,:]
             print dat_analysis.shape
             print 'saving prediction data to %s' % (model.config.output_path+'pred_with_len.txt')
@@ -135,7 +143,7 @@ def do_evaluate(args):
             n_example = 50
             if len(logits.shape) == 2:
                 logits = np.array(logits)[:,1]
-            dev_lab = np.array(dev_lab)
+            dev_lab = np.array(test_lab)
             if len(logits.shape)==2:
                 logits = logits[:,1]
             print logits.shape
@@ -147,13 +155,13 @@ def do_evaluate(args):
             neg_high_loss_idx = neg_idx[np.argsort(-logits[neg_idx])[:n_example]]
 
             for idx in pos_high_loss_idx:
-                print ' '.join(dev_q1[idx])
-                print ' '.join(dev_q2[idx])
+                print ' '.join(test_q1[idx])
+                print ' '.join(test_q2[idx])
                 print dev_lab[idx], preds[idx], '\n'
 
             for idx in neg_high_loss_idx:
-                print ' '.join(dev_q1[idx])
-                print ' '.join(dev_q2[idx])
+                print ' '.join(test_q1[idx])
+                print ' '.join(test_q2[idx])
                 print dev_lab[idx], preds[idx], '\n'
 
 
@@ -207,6 +215,27 @@ input2> Are cats better than people ?
                     print("Closing session.")
                     break
 
+def outputConfusionMatrix(labels, preds, filename):
+    """ Generate a confusion matrix """
+    cm = confusion_matrix(labels, preds, labels=range(2))
+    plt.figure()
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Reds)
+    plt.colorbar()
+    classes = ["Same", "Different"]
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes)
+    plt.yticks(tick_marks, classes)
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, cm[i, j],
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.savefig(filename, bbox_inches = 'tight')
+
+
 def model_class(model_name):
     if model_name == "attention":
         return AttentionModel
@@ -223,7 +252,7 @@ if __name__ == "__main__":
     # Note: we are inputing the test data to the train process for the embeddings only, since we take the union of words in train,dev,test for tok2id.
     # We are not inputing or using the test labels.
     command_parser = subparsers.add_parser('train', help='')
-    command_parser.add_argument('-m', '--model', type=model_class, required=True, help="Model to use.")
+    command_parser.add_argument('-m', '--model', dest='model', type=model_class, required=True, help="Model to use.")
     command_parser.add_argument('-dt1', '--data-train1', dest='data_train1', type=argparse.FileType('r'))
     command_parser.add_argument('-dt2', '--data-train2', dest='data_train2', type=argparse.FileType('r'))
     command_parser.add_argument('-dtl', '--data-train-labels', dest='data_train_labels', type=argparse.FileType('r'))
@@ -234,28 +263,28 @@ if __name__ == "__main__":
     command_parser.add_argument('-de2', '--data-test2', dest='data_test2', type=argparse.FileType('r'))
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/glvocab_1_100.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/glwordvectors_1_100.txt", help="Path to word vectors file")
-    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', default=100)
+    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', type=int, default=100)
     command_parser.add_argument('-cfg', '--config', required=True)
     command_parser.set_defaults(func=do_train)
 
     command_parser = subparsers.add_parser('evaluate', help='')
-    command_parser.add_argument('-m', '--model', type=model_class, required=True, help="Model to use.")
-    command_parser.add_argument('-dd1', '--data-dev1', dest='data_dev1', type=argparse.FileType('r'))
-    command_parser.add_argument('-dd2', '--data-dev2', dest='data_dev2', type=argparse.FileType('r'))
-    command_parser.add_argument('-ddl', '--data-dev-labels', dest='data_dev_labels', type=argparse.FileType('r'))
+    command_parser.add_argument('-m', '--model', dest='model', type=model_class, required=True, help="Model to use.")
+    command_parser.add_argument('-de1', '--data-test1', dest='data_test1', type=argparse.FileType('r'))
+    command_parser.add_argument('-de2', '--data-test2', dest='data_test2', type=argparse.FileType('r'))
+    command_parser.add_argument('-ddl', '--data-test-labels', dest='data_test_labels', type=argparse.FileType('r'))
     command_parser.add_argument('-mp', '--model-path', required=True, help="Training data")
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/vocab.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")
-    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', default=100)
+    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', type=int, default=100)
     command_parser.add_argument('-cfg', '--config', required=True)
     command_parser.set_defaults(func=do_evaluate)
 
     command_parser = subparsers.add_parser('shell', help='')
-    command_parser.add_argument('-m', '--model', type=model_class, required=True, help="Model to use.")
+    command_parser.add_argument('-m', '--model', dest='model', type=model_class, required=True, help="Model to use.")
     command_parser.add_argument('-mp', '--model-path', required=True, help="Training data")
     command_parser.add_argument('-v', '--vocab', type=argparse.FileType('r'), default="data/vocab.txt", help="Path to vocabulary file")
     command_parser.add_argument('-vv', '--vectors', type=argparse.FileType('r'), default="data/wordVectors.txt", help="Path to word vectors file")
-    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', default=100)
+    command_parser.add_argument('-eb', '--embed_size', dest='embed_size', type=int, default=100)
     command_parser.add_argument('-cfg', '--config', required=True)
     command_parser.set_defaults(func=do_shell)
 

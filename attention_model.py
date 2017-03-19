@@ -35,7 +35,7 @@ class AttentionModel(Model):
         self.seqlen2_placeholder = tf.placeholder(tf.int32, (None,))
         self.mask1_placeholder = tf.placeholder(tf.float32, (None, self.max_length))
         self.mask2_placeholder = tf.placeholder(tf.float32, (None, self.max_length))
-        self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,))
+        self.labels_placeholder = tf.placeholder(tf.int32, shape=(None,))
         self.dropout_placeholder = tf.placeholder(tf.float32, [])
 
     def create_feed_dict(self, inputs1_batch, inputs2_batch, seqlen1_batch, seqlen2_batch, labels_batch=None, dropout=1):
@@ -209,8 +209,8 @@ class AttentionModel(Model):
         with tf.variable_scope("LSTM_attention"):
             # Define U and b as variables.
             xavier_init = tf.contrib.layers.xavier_initializer()
-            U = tf.get_variable("U", shape=(self.config.hidden_size,), dtype=tf.float32, initializer=xavier_init)
-            b = tf.Variable(initial_value=0.0, dtype=tf.float32, name="b")
+            U = tf.get_variable("U", shape=(self.config.hidden_size, 2), dtype=tf.float32, initializer=xavier_init)
+            b = tf.Variable(initial_value=np.zeros((1, 2)), dtype=tf.float32, name="b")
 
             last_h_a = self.add_asymmetric_prediction_op(x1, x2, self.seqlen1_placeholder, self.seqlen2_placeholder, self.mask1_placeholder)
             tf.get_variable_scope().reuse_variables()
@@ -220,13 +220,12 @@ class AttentionModel(Model):
 
             # use U and b for final prediction
             h_drop = tf.nn.dropout(last_h, keep_prob=self.dropout_placeholder)
-            preds = tf.reduce_sum(U * h_drop, 1) + b
+            preds = tf.matmul(h_drop, U) + b
 
         return preds
 
     def add_exact_prediction_op(self, preds):
-        pos_thres = tf.constant(0.5, dtype=tf.float32, shape=(1,))
-        return tf.greater(tf.sigmoid(preds), pos_thres)
+        return tf.argmax(preds, 1)
 
     def add_loss_op(self, preds):
         """Adds Ops for the loss function to the computational graph.
@@ -240,8 +239,11 @@ class AttentionModel(Model):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=self.labels_placeholder, logits=preds, pos_weight=self.config.pos_weight))
-        return loss
+        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.labels_placeholder, logits=preds)
+        loss = tf.reduce_mean(loss)
+        with tf.variable_scope("LSTM_attention", reuse=True):
+            U = tf.get_variable("U")
+        return loss + 0.1 * tf.nn.l2_loss(U)
 
     def add_training_op(self, loss):
         """Sets up the training Ops.
@@ -265,7 +267,7 @@ class AttentionModel(Model):
         starter_learning_rate = self.config.lr
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
                                                    200000, self.config.lr_decay_rate, staircase=True)
-        optimizer = tf.train.AdadeltaOptimizer(learning_rate=learning_rate)
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
         grads_and_vars = optimizer.compute_gradients(loss)
         grads, grad_vars = zip(*grads_and_vars)
         grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.config.max_grad_norm)

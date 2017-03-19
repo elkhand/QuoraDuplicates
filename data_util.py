@@ -9,7 +9,7 @@ import logging
 from collections import Counter
 
 import numpy as np
-from util import read_dat, read_lab, one_hot, window_iterator, ConfusionMatrix, load_word_vector_mapping, load_word_vector_mapping_2
+from util import read_dat, read_lab, ConfusionMatrix
 from defs import LBLS, NONE, LMAP, NUM, UNK, EMBED_SIZE
 
 
@@ -138,17 +138,21 @@ def load_and_preprocess_data(args, add_end_token=False):
 
 def load_embeddings(args, helper):
     np.random.seed(0)
-    embeddings = np.array(np.random.randn(len(helper.tok2id) + 1, int(args.embed_size)), dtype=np.float32)
+    embeddings = np.array(np.random.randn(len(helper.tok2id) + 1, args.embed_size), dtype=np.float32)
     embeddings[0] = 0.
     try:
-        for word, vec in load_word_vector_mapping(args.vocab, args.vectors).items():
-            word = normalize(word)
+        for word, vec in zip(args.vocab, args.vectors):
+            word = normalize(word.strip())
             if word in helper.tok2id:
+                vec = np.array(map(float, vec.split()))
                 embeddings[helper.tok2id[word]] = vec
     except:
-        for word, vec in load_word_vector_mapping_2(args.vectors).items():
-            word = normalize(word)
+        args.vectors.seek(0) # Go to the beginning of the file, because "zip" has exhausted the stream.
+        for word_and_vec in args.vectors:
+            word, vec = word_and_vec.split(None, 1)
+            word = normalize(word.strip())
             if word in helper.tok2id:
+                vec = np.array(map(float, vec.split()))
                 embeddings[helper.tok2id[word]] = vec
     logger.info("Initialized embeddings.")
 
