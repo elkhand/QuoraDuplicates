@@ -65,6 +65,10 @@ python sendEmail.py elkhan.dadashov@gmail.com /home/elkhand/QuoraDuplicates/exp_
 python sendEmail.py <your_email> <path_to_file_to_be_attached_to_email> <some_string_to_be_attached_to_subject>
 ```
 
+Get best result from log file:
+```
+python getBestF1ScoreFromLogs.py results/lstm/20170316_194444/log
+```
 
 ## You can download data from this link:
 
