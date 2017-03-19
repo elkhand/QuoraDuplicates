@@ -4,20 +4,18 @@ from datetime import datetime
 class Config:
     n_word_features = 1 # Number of features for every word in the input.
     n_features = n_word_features # Number of features for every word in the input.
-    max_length = 35 # longest sequence to parse
+    max_length = 20 # longest sequence to parse
     n_classes = 2
-    dropout = 0.7
-    hidden_size = 700
-    second_hidden_size=None
+    dropout = 0.5
+    hidden_size = 1100
+    second_hidden_size = 800
     batch_size = 100
     n_epochs = 1000
     lr = 0.0006#0.0003 F1: 76 Acc: 83
     lr_decay_rate = 0.1
     embeddings_trainable = True
     pos_weight = 1.7
-    # bidirectional = False
-    add_distance = False
-    beta = 0.005
+    beta = 0.1
     
 
     def __init__(self, args):
