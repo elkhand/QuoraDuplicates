@@ -108,7 +108,6 @@ class Model(object):
         feed = self.create_feed_dict(*batch)
 
         predictions, logits, loss = sess.run([self.predictions, self.pred, self.loss], feed_dict=feed)
-        # return predictions, loss, prob_pred
         return predictions, logits, loss
 
     def evaluate(self, sess, inputs_raw):
@@ -122,6 +121,7 @@ class Model(object):
         labels = np.array(labels, dtype=np.float32)
         preds = np.array(preds)
         probs = logits
+
         if isDev:
             # store dev prediction probabilities
             prob_predSM = self.softmax(np.array(probs))
@@ -169,12 +169,11 @@ class Model(object):
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
         for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
             # batch = batch[:4] # ignore label
-            preds_, logits_, loss_  = self._predict_on_batch(sess, batch)
+            preds_, logits_, loss_ = self._predict_on_batch(sess, batch)
             preds += list(preds_)
-            loss_record.append(loss_)
             logits += list(logits_)
+            loss_record.append(loss_)
             prog.update(i + 1, [])
-        #return preds,  np.mean(loss_record), probs
         return preds, logits, np.mean(loss_record)
 
     def _train_on_batch(self, sess, batch):

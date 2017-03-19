@@ -56,11 +56,9 @@ class ModelHelper(object):
         self.max_length = max_length
 
     def vectorize_example(self, sentence, labels=None):
-        # sentence_ = [[self.tok2id.get(normalize(word), self.tok2id[UNK]), self.tok2id[P_CASE + casing(word)]] for word in sentence]
         unknown_id = self.tok2id[UNK]
         sentence_ = [self.tok2id.get(normalize(word), unknown_id) for word in sentence]
         return sentence_
-        # return sentence_, [LBLS[-1] for _ in sentence]
 
     def vectorize(self, data):
         return [self.vectorize_example(sentence) for sentence in data]
