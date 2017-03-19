@@ -120,7 +120,6 @@ class Model(object):
         preds, loss, probs = self._output(sess, inputs)
         labels = np.array(labels, dtype=np.float32)
         preds = np.array(preds)
-        
         if isDev:
             # store dev prediction probabilities
             prob_predSM = self.softmax(np.array(probs))
@@ -138,7 +137,7 @@ class Model(object):
             sumOfProbs = np.add(thisProbs, otherModelProbs)
             avgOfProbs = np.divide(sumOfProbs,2.0)
             newPreds = [0 if diff > same else 1 for diff,same in avgOfProbs]
-            preds = newPreds
+            preds = np.asarray(newPreds)
         #End of Ensemble part
 
 
