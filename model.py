@@ -139,7 +139,7 @@ class Model(object):
             sumOfProbs = np.add(thisProbs, otherModelProbs)
             avgOfProbs = np.divide(sumOfProbs,2.0)
             newPreds = [0 if diff > same else 1 for diff,same in avgOfProbs]
-            preds = newPreds
+            preds = np.asarray(newPreds)
         #End of Ensemble part
 
 
