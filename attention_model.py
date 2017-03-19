@@ -178,14 +178,16 @@ class AttentionModel(Model):
                     tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
                     tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
                     M_t = Y * tmp2  # (?, L, hidden_size)
+                    alpha_t = tf.nn.softmax(tf.reduce_sum(M_t, 2) + mask1)
+
                 else:
                     # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
                     tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
                     tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
                     M_t = tf.tanh(W_y_Y + tmp2)  # (?, L, hidden_size)
 
-                # alpha_t = softmax(w^T * M_t)
-                alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2) + mask1)  # (?, L)
+                    # alpha_t = softmax(w^T * M_t)
+                    alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2) + mask1)  # (?, L)
 
                 # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
                 tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
