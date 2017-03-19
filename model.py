@@ -107,8 +107,9 @@ class Model(object):
         #inputs2_batch = np.array(inputs2_batch)
         feed = self.create_feed_dict(*batch)
 
-        predictions, prob_pred, loss = sess.run([self.predictions, self.pred, self.loss], feed_dict=feed)
-        return predictions, loss, prob_pred
+        predictions, logits, loss = sess.run([self.predictions, self.pred, self.loss], feed_dict=feed)
+        # return predictions, loss, prob_pred
+        return predictions, logits, loss
 
     def evaluate(self, sess, inputs_raw):
         """Evaluates model performance on @examples."""
@@ -117,10 +118,10 @@ class Model(object):
         return self._evaluate(sess, inputs, labels, isDev=True)
 
     def _evaluate(self, sess, inputs, labels, isDev=False):
-        preds, loss, probs = self._output(sess, inputs)
+        preds, logits, loss = self._output(sess, inputs)
         labels = np.array(labels, dtype=np.float32)
         preds = np.array(preds)
-        
+        probs = logits
         if isDev:
             # store dev prediction probabilities
             prob_predSM = self.softmax(np.array(probs))
@@ -152,7 +153,7 @@ class Model(object):
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
         acc = sum(labels==preds) / float(len(labels))
-        return (acc, p, r, f1, loss,probs, labels, preds)
+        return (acc, p, r, f1, loss, logits, labels, preds)
 
     def output(self, sess, inputs_raw):
         """
@@ -163,17 +164,18 @@ class Model(object):
 
     def _output(self, sess, inputs):
         preds = []
+        logits = []
         loss_record = []
-        probs = []
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
         for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
             # batch = batch[:4] # ignore label
-            preds_, loss_, probs_ = self._predict_on_batch(sess, batch)
+            preds_, logits_, loss_  = self._predict_on_batch(sess, batch)
             preds += list(preds_)
             loss_record.append(loss_)
-            probs += list(probs_)
+            logits += list(logits_)
             prog.update(i + 1, [])
-        return preds, np.mean(loss_record), probs
+        #return preds,  np.mean(loss_record), probs
+        return preds, logits, np.mean(loss_record)
 
     def _train_on_batch(self, sess, batch):
         """Perform one step of gradient descent on the provided batch of data."""
@@ -194,13 +196,11 @@ class Model(object):
         logger.info("Evaluating on training data: 10k sample")
         n_train_evaluate = 10000
         train_entity_scores = self._evaluate(sess, train[:n_train_evaluate], train_labels[:n_train_evaluate])
-        trainProbs = train_entity_scores[5]
         train_entity_scores = train_entity_scores[:5]
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *train_entity_scores)
 
         logger.info("Evaluating on development data")
         entity_scores = self._evaluate(sess, dev, dev_labels, isDev=True)
-        devProbs =  entity_scores[5]
         entity_scores = entity_scores[:5]
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
 
