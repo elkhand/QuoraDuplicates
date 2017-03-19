@@ -33,7 +33,7 @@ class Config:
         self.dev_prob_output = self.output_path + "dev_pred_probs.txt"
         self.isEnsembleOn = False
         if self.isEnsembleOn:
-            self.attention_dev_prob_output = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/dev_pred_probs.txt"
+            self.attention_dev_prob_output = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/att_test_dev_pred_probs.txt"
         
         self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
 

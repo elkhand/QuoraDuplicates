@@ -110,7 +110,6 @@ class Model(object):
         predictions, logits, loss = sess.run([self.predictions, self.pred, self.loss], feed_dict=feed)
         return predictions, logits, loss
 
-
     def evaluate(self, sess, inputs_raw):
         """Evaluates model performance on @examples."""
         inputs = self.preprocess_sequence_data(inputs_raw)
@@ -140,7 +139,7 @@ class Model(object):
             sumOfProbs = np.add(thisProbs, otherModelProbs)
             avgOfProbs = np.divide(sumOfProbs,2.0)
             newPreds = [0 if diff > same else 1 for diff,same in avgOfProbs]
-            preds = newPreds
+            preds = np.asarray(newPreds)
         #End of Ensemble part
 
 
@@ -154,7 +153,7 @@ class Model(object):
         r = correct_preds / total_correct if correct_preds > 0 else 0
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
         acc = sum(labels==preds) / float(len(labels))
-        return (acc, p, r, f1, loss,probs, labels, preds)
+        return (acc, p, r, f1, loss, logits, labels, preds)
 
     def output(self, sess, inputs_raw):
         """
@@ -196,13 +195,11 @@ class Model(object):
         logger.info("Evaluating on training data: 10k sample")
         n_train_evaluate = 10000
         train_entity_scores = self._evaluate(sess, train[:n_train_evaluate], train_labels[:n_train_evaluate])
-        trainProbs = train_entity_scores[5]
         train_entity_scores = train_entity_scores[:5]
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *train_entity_scores)
 
         logger.info("Evaluating on development data")
         entity_scores = self._evaluate(sess, dev, dev_labels, isDev=True)
-        devProbs =  entity_scores[5]
         entity_scores = entity_scores[:5]
         logger.info("acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f", *entity_scores)
 
