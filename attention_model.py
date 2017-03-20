@@ -168,9 +168,9 @@ class AttentionModel(Model):
             # Initialize r_0 to zeros.
             r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
             r_step = []
+            alpha_step = []
 
             for time_step in range(self.max_length):
-
                 h_t = Y2[:, time_step, :]
 
                 if self.config.score_type2:
@@ -189,6 +189,8 @@ class AttentionModel(Model):
                     # alpha_t = softmax(w^T * M_t)
                     alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2) + mask1)  # (?, L)
 
+                alpha_step.append(alpha_t)
+
                 # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
                 tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
                 Y_alpha_t = tf.reduce_sum(Y * tmp3, 1)  # (?, hidden_size)
@@ -201,6 +203,8 @@ class AttentionModel(Model):
             tmp4 = tf.one_hot(seqlen2 - 1, self.max_length, dtype=tf.float32)  # (?, L)
             r_L = tf.squeeze(tf.matmul(r, tf.expand_dims(tmp4, 2)), 2)  # (?, hidden_size)
             last_h = tf.tanh(tf.matmul(r_L, W_p) + tf.matmul(last_h, W_x))  # (?, hidden_size)
+
+            alpha = tf.transpose(tf.stack(alpha_step), [1, 0, 2], "alpha")  # (?, L, L)
 
         return last_h
 

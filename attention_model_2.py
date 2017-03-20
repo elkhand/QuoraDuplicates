@@ -185,6 +185,7 @@ class AttentionModel(Model):
             else:
                 r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
             r_step = []
+            alpha_step = []
 
             for time_step in range(self.max_length):
 
@@ -234,12 +235,15 @@ class AttentionModel(Model):
                     r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size)
 
                 r_step.append(r_t)
+                alpha_step.append(alpha_t)
 
             # h* = tanh((W_p * r_L) + (W_x * h_N))
             r = tf.transpose(tf.stack(r_step), [1, 2, 0])  # (?, hidden_size, L)
             tmp4 = tf.one_hot(seqlen2 - 1, self.max_length, dtype=tf.float32)  # (?, L)
             r_L = tf.squeeze(tf.matmul(r, tf.expand_dims(tmp4, 2)), 2)  # (?, hidden_size)
             last_h = tf.tanh(tf.matmul(r_L, W_p) + tf.matmul(last_h, W_x))  # (?, hidden_size)
+
+            alpha = tf.transpose(tf.stack(alpha_step), [1, 0, 2], "alpha")  # (?, L, L)
 
         return last_h
 
