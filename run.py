@@ -102,9 +102,7 @@ def do_evaluate(args):
     if add_end_token:
         for i in range(len(test_q1)):
             test_q1[i].append(END_TOKEN)
-            test_q1[i].append(END_TOKEN)
         for i in range(len(test_q2)):
-            test_q2[i].append(END_TOKEN)
             test_q2[i].append(END_TOKEN)
 
     test_lab = read_lab(args.data_test_labels)
@@ -147,6 +145,9 @@ def do_shell(args):
     embeddings = load_embeddings(args, helper)
     config.embed_size = embeddings.shape[1]
 
+    add_end_token = args.model is AttentionModel
+
+
     with tf.Graph().as_default():
         logger.info("Building model...",)
         start = time.time()
@@ -173,13 +174,16 @@ input2> Are cats better than people ?
                     sentence2 = raw_input("input2> ")
                     tokens1 = sentence1.strip().split(" ")
                     tokens2 = sentence2.strip().split(" ")
+                    if add_end_token:
+                        tokens1.append(END_TOKEN)
+                        tokens2.append(END_TOKEN)
                     sentence1, sentence2 = helper.vectorize([tokens1, tokens2])
-                    predictions, _ = model.output(session, [(sentence1, sentence2, 0)])
+                    predictions, _ , _= model.output(session, [(sentence1, sentence2, 0)])
                     prediction = predictions[0]
                     if prediction == 1:
-                        print "Similar"
+                        print "Duplicate"
                     else:
-                        print "Not similar"
+                        print "Not Duplicate"
                     #print_sentence(sys.stdout, sentence, [""] * len(tokens), predictions)
                 except EOFError:
                     print("Closing session.")
