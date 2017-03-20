@@ -19,7 +19,7 @@ class Config:
     batch_size = 100
     n_epochs = 100
     max_grad_norm = 10.
-    lr = 0.0003
+    lr = 0.0006
     lr_decay_rate = 0.9
     embeddings_trainable = False
     pos_weight = 1.7
@@ -35,7 +35,8 @@ class Config:
             self.output_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+"/results/{}/{:%Y%m%d_%H%M%S}/".format(self.cell, datetime.now())
         self.model_output = self.output_path + "model.weights"
         self.eval_output = self.output_path + "results.txt"
+        self.dev_prob_output = self.output_path + "dev_pred_probs.txt"
         self.conll_output = self.output_path + "{}_predictions.conll".format(self.cell)
-
+        self.isEnsembleOn = False
         self.log_output = self.output_path + "log"
         self.embed_size = int(args.embed_size)
