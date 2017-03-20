@@ -162,7 +162,7 @@ input2> Are cats better than people ?
                     tokens1 = sentence1.strip().split(" ")
                     tokens2 = sentence2.strip().split(" ")
                     sentence1, sentence2 = helper.vectorize([tokens1, tokens2])
-                    predictions, _ = model.output(session, [(sentence1, sentence2, 0)])
+                    predictions, _, _, _ = model.output(session, [(sentence1, sentence2, 0)])
                     prediction = predictions[0]
                     if prediction == 1:
                         print "Similar"

@@ -100,17 +100,6 @@ class Model(object):
         embeddings = tf.reshape(to_concat, [-1, self.config.max_length, self.config.n_features * self.config.embed_size])
         return embeddings
 
-    def _predict_on_batch(self, sess, batch):
-        """Make predictions for the provided batch of data."""
-
-        #inputs1_batch = np.array(inputs1_batch)
-        #inputs2_batch = np.array(inputs2_batch)
-        feed = self.create_feed_dict(*batch)
-
-        predictions, logits, loss = sess.run([self.predictions, self.pred, self.loss], feed_dict=feed)
-        # return predictions, loss, prob_pred
-        return predictions, logits, loss
-
     def evaluate(self, sess, inputs_raw):
         """Evaluates model performance on @examples."""
         inputs = self.preprocess_sequence_data(inputs_raw)
@@ -118,21 +107,21 @@ class Model(object):
         return self._evaluate(sess, inputs, labels, isDev=True)
 
     def _evaluate(self, sess, inputs, labels, isDev=False):
-        preds, logits, loss = self._output(sess, inputs)
+        preds, logits, loss, _ = self._output(sess, inputs)
         labels = np.array(labels, dtype=np.float32)
         preds = np.array(preds)
         probs = logits
         if isDev:
             # store dev prediction probabilities
-            prob_predSM = self.softmax(np.array(probs))
-            with open(self.config.dev_prob_output, 'a') as f:    
+            prob_predSM = softmax(np.array(probs))
+            with open(self.config.dev_prob_output, 'a') as f:
                 np.savetxt(f, prob_predSM, fmt='%1.10f', delimiter=' ', newline='\n')
 
         #---Ensemble part
         if self.config.isEnsembleOn and isDev:
             otherModelProbs=[]
             thisProbs = np.array(probs)
-            thisProbs = self.softmax(thisProbs)
+            thisProbs = softmax(thisProbs)
             with open(self.config.attention_dev_prob_output, 'r') as f:
                 otherModelProbs = np.loadtxt(f)
             otherModelProbs = otherModelProbs[self.epochNum*len(labels):(self.epochNum+1)*len(labels)]
@@ -155,39 +144,37 @@ class Model(object):
         acc = sum(labels==preds) / float(len(labels))
         return (acc, p, r, f1, loss, logits, labels, preds)
 
-    def output(self, sess, inputs_raw):
+    def output(self, sess, inputs_raw, extra_fetch=[]):
         """
         Reports the output of the model on examples (uses helper to featurize each example).
         """
         inputs = self.preprocess_sequence_data(inputs_raw)
-        return self._output(sess, inputs)
+        return self._output(sess, inputs, extra_fetch)
 
-    def _output(self, sess, inputs):
+    def _output(self, sess, inputs, extra_fetch=[]):
         preds = []
         logits = []
         loss_record = []
+        extras = []
         prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
         for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
             # batch = batch[:4] # ignore label
-            preds_, logits_, loss_  = self._predict_on_batch(sess, batch)
+            feed = self.create_feed_dict(*batch)
+            preds_, logits_, loss_, extra_ = sess.run([self.predictions, self.pred, self.loss, extra_fetch], feed_dict=feed)
             preds += list(preds_)
             loss_record.append(loss_)
             logits += list(logits_)
+            if extra_fetch:
+                extras.append(extra_)
             prog.update(i + 1, [])
         #return preds,  np.mean(loss_record), probs
-        return preds, logits, np.mean(loss_record)
-
-    def _train_on_batch(self, sess, batch):
-        """Perform one step of gradient descent on the provided batch of data."""
-
-        feed = self.create_feed_dict(*batch, dropout=self.config.dropout)
-        _, loss = sess.run([self.train_op, self.loss], feed_dict=feed)
-        return loss
+        return preds, logits, np.mean(loss_record), extras
 
     def _run_epoch(self, sess, train, train_labels, dev, dev_labels):
         prog = Progbar(target=1 + int(len(train) / self.config.batch_size))
         for i, batch in enumerate(minibatches(train, self.config.batch_size)):
-            loss = self._train_on_batch(sess, batch)
+            feed = self.create_feed_dict(*batch, dropout=self.config.dropout)
+            _, loss = sess.run([self.train_op, self.loss], feed_dict=feed)
             prog.update(i + 1, [("train loss", loss)])
 
             if self.report: self.report.log_train_loss(loss)
@@ -240,8 +227,6 @@ class Model(object):
         self.loss = self.add_loss_op(self.pred)
         self.train_op = self.add_training_op(self.loss)
         self.predictions = self.add_exact_prediction_op(self.pred)
-        
-
 
     def __init__(self, helper, config, pretrained_embeddings, report=None):
         self.helper = helper
@@ -253,18 +238,18 @@ class Model(object):
         self.pretrained_embeddings = pretrained_embeddings
 
         self._build()
-    
-    def softmax(self,x):  
-        if len(x.shape) > 1:
-            t = np.max(x, axis = 1)
-            x -= t.reshape((x.shape[0], 1))
-            x = np.exp(x)
-            t = np.sum(x, axis = 1)
-            x /= t.reshape((x.shape[0], 1))
-        else:
-            tmp = np.max(x)
-            x -= tmp
-            x = np.exp(x)
-            t = np.sum(x)
-            x /= t    
-        return x
+
+def softmax(x):
+    if len(x.shape) > 1:
+        t = np.max(x, axis = 1)
+        x -= t.reshape((x.shape[0], 1))
+        x = np.exp(x)
+        t = np.sum(x, axis = 1)
+        x /= t.reshape((x.shape[0], 1))
+    else:
+        tmp = np.max(x)
+        x -= tmp
+        x = np.exp(x)
+        t = np.sum(x)
+        x /= t
+    return x
