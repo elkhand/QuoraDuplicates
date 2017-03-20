@@ -20,7 +20,7 @@ class Config:
     lr = 0.001
     lr_decay_rate = 0.9
     uses_attention = True
-    score_type2 = False
+    score_type2 = True
     embeddings_trainable = False
     pos_weight = 1.7
 
