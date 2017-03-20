@@ -167,7 +167,8 @@ class Model(object):
             if extra_fetch:
                 extras.append(extra_)
             prog.update(i + 1, [])
-        #return preds,  np.mean(loss_record), probs
+        if extra_fetch:
+            extras = np.concatenate(extras)
         return preds, logits, np.mean(loss_record), extras
 
     def _run_epoch(self, sess, train, train_labels, dev, dev_labels):

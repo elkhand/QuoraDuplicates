@@ -42,8 +42,7 @@ def do_train(args):
     config = config_module.Config(args)
     print args.config
 
-    add_end_token = args.model is AttentionModel
-    helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab = load_and_preprocess_data(args, add_end_token=add_end_token)
+    helper, train_dat1, train_dat2, train_lab, dev_dat1, dev_dat2, dev_lab = load_and_preprocess_data(args)
     train = zip(train_dat1, train_dat2, train_lab)
     dev = zip(dev_dat1, dev_dat2, dev_lab)
     embeddings = load_embeddings(args, helper)
@@ -162,12 +161,39 @@ input2> Are cats better than people ?
                     tokens1 = sentence1.strip().split(" ")
                     tokens2 = sentence2.strip().split(" ")
                     sentence1, sentence2 = helper.vectorize([tokens1, tokens2])
-                    predictions, _, _, _ = model.output(session, [(sentence1, sentence2, 0)])
+                    if args.model is AttentionModel:
+                        extra_fetch = "LSTM_attention/alpha:0"
+                    else:
+                        extra_fetch = []
+                    predictions, _, _, extras = model.output(session, [(sentence1, sentence2, 0)], extra_fetch)
                     prediction = predictions[0]
                     if prediction == 1:
                         print "Similar"
                     else:
                         print "Not similar"
+                    if args.model is AttentionModel:
+                        alphas = extras
+                        alpha = alphas[0]
+                        alpha = alpha[0:len(tokens2), 0:len(tokens1)]
+                        np.set_printoptions(threshold=np.nan, linewidth=1000)
+                        print alpha
+
+                        plt.clf()
+                        plt.axis('off')
+
+                        rows = tokens2
+                        columns = tokens1
+                        cell_text = [[''] * len(columns)] * len(rows)
+                        cell_colors = plt.cm.Blues(alpha)
+
+                        table = plt.table(cellText=cell_text, cellColours=cell_colors, rowLabels=rows, colLabels=columns, loc='center', colWidths=[0.08] * len(columns))
+                        table.auto_set_font_size(False)
+                        table.scale(1, 2)
+                        for key, cell in table.get_celld().items():
+                            cell.set_linewidth(0)
+
+                        plt.savefig("attention.png", bbox_inches = 'tight')
+
                     #print_sentence(sys.stdout, sentence, [""] * len(tokens), predictions)
                 except EOFError:
                     print("Closing session.")
