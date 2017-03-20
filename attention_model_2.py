@@ -209,7 +209,7 @@ class AttentionModel(Model):
                     r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size+embed_size)
 
                 elif self.config.score_type == 2 or self.config.score_type2:
-                    # M_t = Y .* ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
+                    # M_t = Y ^T ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
                     tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
                     tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
                     M_t = Y * tmp2  # (?, L, hidden_size)

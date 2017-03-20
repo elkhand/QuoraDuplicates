@@ -18,7 +18,6 @@ import numpy as np
 import os
 
 from util import print_sentence, write_conll, read_dat, read_lab
-from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
 from attention_model import AttentionModel
 from siamese_model import SiameseModel
 from bow_model import BOWModel
@@ -28,6 +27,7 @@ matplotlib.use('agg')
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import itertools
+from data_util import *
 
 logger = logging.getLogger("FinalProject")
 logger.setLevel(logging.DEBUG)
@@ -95,6 +95,15 @@ def do_evaluate(args):
     helper = ModelHelper.load(args.model_path)
     test_q1 = read_dat(args.data_test1)
     test_q2 = read_dat(args.data_test2)
+
+    # add end token
+    add_end_token = args.model is AttentionModel
+    if add_end_token:
+        for i in range(len(test_q1)):
+            test_q1[i].append(END_TOKEN)
+        for i in range(len(test_q2)):
+            test_q2[i].append(END_TOKEN)
+
     test_lab = read_lab(args.data_test_labels)
     test_dat1 = helper.vectorize(test_q1)
     test_dat2 = helper.vectorize(test_q2)
@@ -102,6 +111,7 @@ def do_evaluate(args):
 
     embeddings = load_embeddings(args, helper)
     config.embed_size = embeddings.shape[1]
+
 
     with tf.Graph().as_default():
         logger.info("Building model...",)
@@ -134,6 +144,9 @@ def do_shell(args):
     embeddings = load_embeddings(args, helper)
     config.embed_size = embeddings.shape[1]
 
+    add_end_token = args.model is AttentionModel
+
+
     with tf.Graph().as_default():
         logger.info("Building model...",)
         start = time.time()
@@ -160,17 +173,23 @@ input2> Are cats better than people ?
                     sentence2 = raw_input("input2> ")
                     tokens1 = sentence1.strip().split(" ")
                     tokens2 = sentence2.strip().split(" ")
+                    # if add_end_token:
+                    #     tokens1.append(END_TOKEN)
+                    #     tokens2.append(END_TOKEN)
                     sentence1, sentence2 = helper.vectorize([tokens1, tokens2])
+
                     if args.model is AttentionModel:
                         extra_fetch = "LSTM_attention/alpha:0"
                     else:
                         extra_fetch = []
                     predictions, _, _, extras = model.output(session, [(sentence1, sentence2, 0)], extra_fetch)
+
                     prediction = predictions[0]
                     if prediction == 1:
-                        print "Similar"
+                        print "Duplicate"
                     else:
-                        print "Not similar"
+                        print "Not Duplicate"
+
                     if args.model is AttentionModel:
                         alphas = extras
                         alpha = alphas[0]
