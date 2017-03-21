@@ -173,9 +173,9 @@ input2> Are cats better than people ?
                     sentence2 = raw_input("input2> ")
                     tokens1 = sentence1.strip().split(" ")
                     tokens2 = sentence2.strip().split(" ")
-                    # if add_end_token:
-                    #     tokens1.append(END_TOKEN)
-                    #     tokens2.append(END_TOKEN)
+                    if add_end_token:
+                        tokens1.append(END_TOKEN)
+                        tokens2.append(END_TOKEN)
                     sentence1, sentence2 = helper.vectorize([tokens1, tokens2])
 
                     if args.model is AttentionModel:
