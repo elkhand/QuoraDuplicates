@@ -1,0 +1,52 @@
+
+Our best performing model is based on Siamese architecture of Long Short Term Memory network. Our model's goal is given a pair of questions, to classify whether these 2 questions are duplicate or not. There are two LSTMs: LSTM_A and LSTM_B, which share same weights. Each LSTM goes over each sentence separately.
+
+Each word x_i of sentence is represented by 300 dimensional GLoVE vector, each word is passed to LSTM, which causes LSTM to update its hdiden state for each input word. We combine The h_T the last hidden layer of each LSTM with corresponding question length,h_len which will be the representation of the each question. 
+
+Then we get final representation of both questions, 
+h_final = [h1_len, h2_len, sqrDDist(h1_len, h2_len), h1_len * h2_len]
+
+Square distance helps the model to entirely capture the semantic differences of questions during training. The hadamar product helps the model to capture the semantic similarity between questions during training, this is similar to cosine similarity without normalization denominator.
+
+We have used weighted cross entropy function as our loss function with pos_weight = 1.675, as there are only 37% positive examples in the dataset.
+
+In the end after tuning parameters, we have achieved 84.1% accuracy, 79% F1, but we chose best F1 score model for further evaluations where we achieved 79.3% F1, and 83.3% accuracy. 
+
+Difference between our Siamese architecture  paper [?] is we have different representation, 2 dense layers (which are both different from paper) and similarity function.
+
+Quora have achieved 87% accuracy and 88% F1 score. But the blog post where they described their results is very abstract, they do not clearly metnion what are their dense layers or representations. Also they do not mention about their model overfitting or questions preprocessing(i.e., tokenization, synatx correcting) techniques. We did not perform any pre-processing on the questions dataset, and split questions into tokens by space character. Also they have pretrained their word vectors on Quora corpus, which is not publicly available. Considering Questions dataset is also from Quora, thus their word  vectors helped them to achieve better results. We uniform randomly devided the whole dataset into 60% training, 20% dev and 20% test buckets, which Quora does not mention their bucketing strategy either.
+
+
+Overfitting
+We have used dropout = 0.5 and l2 normalization for all the parameters of our model (except biases). For further improving overfitting issue, we have applied exponential decay to learning rate (which decreases it) after 10th epoch and pass it to AdamOptimizer. Our model have high overfitting between train and dev set, even the above techniques applied. But because model did well in accuracy and F1 score, overfitting did not harm the model while evaluating on test set either.
+
+To overcome overfitting, we have tried to consider only subset of the question words (max 20 words from each question), try different learning rate values and increase lambda paramater for l2 normalization. This technique has helped in delaying overfitting few epochs, but eventually even after these techniques we still had overfitting.
+
+We decreased model complexity, by decreasing 2 dense layers into 1, and decreasing number of parameters 20 times, in this case the model was underfitting, but these modifications caused our accuracy drop (-2%) to 81%. Thsu we decided to keep overfitting parameters which gave us the best accuracy and F1 score.
+
+Results:
+The model has performed well in different categories such as synonymous words/concepts, specificity of the question and compound questions, as can be seen from the examples below:
+
+
+SYNONYMOUS WORDS/CONCEPTS
+Q1> Will the Supreme Court's decision of playing the National Anthem before movie screenings affect your patriotism?
+Q2> What's your stand on the recent Supreme Court's order about national anthem in cinema halls? 
+Predicted: Duplicate 
+True label: Duplicate
+
+SPECIFICITY OF THE QUESTION
+Q1> How many two-digit numbers can you form using the digits 1,2,3,4,5,6,7,8 and 9 without repetition? 
+Q2> How many two-digit numbers can you form using the digits 1,2,5,7,8 and 9 without repetition?
+Predicted: Not Duplicate 
+True label: Not Duplicate
+
+COMPOUND/MULTIPLE QUESTIONS
+Q1> What are input and output devices? What are some examples? 
+Q2> What are some examples of output and input devices? 
+Predicted: Duplicate 
+True label: Duplicate
+
+1) Write about unknown words example
+2) Write where the model performs bad.
+
+
