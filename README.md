@@ -71,6 +71,27 @@ CS224N Final Project: Determining if two questions are duplicates of each other.
        -cfg config/siamese_0.py \
        -mp results/lstm/XXX/
        ```
+   * Running the shell (replace ``XXX`` with the path to the folder that contains the model files)
+     - Running the shell for the Attention model:
+       ```
+       python run.py shell \
+       -v data/glvocab_1.txt \
+       -vv data/glwordvectors_1_300.txt \
+       -eb 300 \
+       -m attention \
+       -cfg config/attention_0.py \
+       -mp results/lstm/XXX/
+       ```
+     - Running the shell for the Siamese model:
+       ```
+       python run.py shell \
+       -v data/glvocab_1.txt \
+       -vv data/glwordvectors_1_300.txt \
+       -eb 300 \
+       -m siamese \
+       -cfg config/siamese_0.py \
+       -mp results/lstm/XXX/
+       ```
    * Running sendEmail.py script:
      ```
      python scripts/sendEmail.py elkhan.dadashov@gmail.com /home/elkhand/QuoraDuplicates/exp_march9_relu_pred.txt "exp1 beta=xx"
