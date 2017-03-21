@@ -10,14 +10,14 @@ from collections import Counter
 
 import numpy as np
 from util import read_dat, read_lab, ConfusionMatrix
-from defs import LBLS, NONE, LMAP, NUM, UNK, EMBED_SIZE
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
-
+NONE = "O"
+NUM = "NNNUMMM"
+UNK = "UUUNKKK"
 START_TOKEN = "<s>"
 END_TOKEN = "</s>"
 
@@ -27,23 +27,6 @@ def normalize(word):
     """
     if word.isdigit(): return NUM
     else: return word.lower()
-
-def featurize(embeddings, word):
-    """
-    Featurize a word given embeddings.
-    """
-    word = normalize(word)
-    wv = embeddings.get(word, embeddings[UNK])
-    return np.hstack((wv,))
-
-def evaluate(model, X, Y):
-    cm = ConfusionMatrix(labels=LBLS)
-    Y_ = model.predict(X)
-    for i in range(Y.shape[0]):
-        y, y_ = np.argmax(Y[i]), np.argmax(Y_[i])
-        cm.update(y,y_)
-    cm.print_table()
-    return cm.summary()
 
 class ModelHelper(object):
     """
@@ -56,11 +39,9 @@ class ModelHelper(object):
         self.max_length = max_length
 
     def vectorize_example(self, sentence, labels=None):
-        # sentence_ = [[self.tok2id.get(normalize(word), self.tok2id[UNK]), self.tok2id[P_CASE + casing(word)]] for word in sentence]
         unknown_id = self.tok2id[UNK]
         sentence_ = [self.tok2id.get(normalize(word), unknown_id) for word in sentence]
         return sentence_
-        # return sentence_, [LBLS[-1] for _ in sentence]
 
     def vectorize(self, data):
         return [self.vectorize_example(sentence) for sentence in data]

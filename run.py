@@ -17,7 +17,7 @@ import numpy as np
 
 import os
 
-from util import print_sentence, write_conll, read_dat, read_lab
+from util import write_conll, read_dat, read_lab
 from attention_model import AttentionModel
 from siamese_model import SiameseModel
 from bow_model import BOWModel
@@ -178,6 +178,7 @@ input2> Are cats better than people ?
                         tokens2.append(END_TOKEN)
                     sentence1, sentence2 = helper.vectorize([tokens1, tokens2])
 
+                    # For the attention model, we will also print the alpha value.
                     if args.model is AttentionModel:
                         extra_fetch = "LSTM_attention/alpha:0"
                     else:
@@ -213,7 +214,6 @@ input2> Are cats better than people ?
 
                         plt.savefig("attention.png", bbox_inches = 'tight')
 
-                    #print_sentence(sys.stdout, sentence, [""] * len(tokens), predictions)
                 except EOFError:
                     print("Closing session.")
                     break
