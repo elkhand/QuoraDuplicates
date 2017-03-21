@@ -17,10 +17,10 @@ for embed_size in [100, 300]:
         current_vocab.append(word)
         f_out.write(line[len(word)+1:])
 
-      if vocab is None:
-        vocab = current_vocab
-      else:
-        assert vocab == current_vocab
+  if vocab is None:
+    vocab = current_vocab
+  else:
+    assert vocab == current_vocab
 
 assert len(vocab) == 400000
 
