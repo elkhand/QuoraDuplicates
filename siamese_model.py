@@ -46,9 +46,13 @@ class SiameseModel(Model):
         x2 = self.add_embedding(2)
         dropout_rate = self.dropout_placeholder
 
+        # TensorFlow 1.0 compatibility
         BasicLSTMCell = tf.contrib.rnn.BasicLSTMCell if hasattr(tf.contrib.rnn, 'BasicLSTMCell') else tf.nn.rnn_cell.BasicLSTMCell
-        LSTMStateTuple = tf.contrib.rnn.LSTMStateTuple if hasattr(tf.contrib.rnn, 'LSTMStateTuple') else tf.nn.rnn_cell.LSTMStateTuple
         DropoutWrapper = tf.contrib.rnn.DropoutWrapper if hasattr(tf.contrib.rnn, 'DropoutWrapper') else tf.nn.rnn_cell.DropoutWrapper
+        def concat(values, axis):
+            if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
+                return tf.concat(values, axis)
+            return tf.concat(axis, values)
 
         if self.config.cell == "lstm":
             cell = BasicLSTMCell(self.config.hidden_size)
@@ -58,43 +62,41 @@ class SiameseModel(Model):
 
         xavier_init = tf.contrib.layers.xavier_initializer()
 
-        
+
         m = self.config.second_hidden_size
         with tf.variable_scope("HiddenLayerVars"):
             b1 = tf.get_variable("b1", initializer=xavier_init, shape=[1, m])
             b2 = tf.get_variable("b2", initializer=xavier_init, shape=[1, 2])
-            W1 = tf.get_variable("W1", initializer=xavier_init, shape=[3*self.config.hidden_size+1, m])
+            if self.config.bidirectional:
+                W1 = tf.get_variable("W1", initializer=xavier_init, shape=[3*2*self.config.hidden_size + 1, m])
+            else:
+                W1 = tf.get_variable("W1", initializer=xavier_init, shape=[3*self.config.hidden_size + 1, m])
             W2 = tf.get_variable("W2", initializer=xavier_init, shape=[m, 2])
             tf.get_variable_scope().reuse_variables()
 
-        # Initialize state as vector of zeros.
-        batch_size = tf.shape(x1)[0]
-        h1 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
-        c1 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
-        h2 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
-        c2 = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
         with tf.variable_scope("LSTM"):
-            _, (c1, h1) = tf.nn.dynamic_rnn(cell, x1, initial_state=LSTMStateTuple(c1, h1), sequence_length=self.seqlen1_placeholder)
-            #h1_drop = tf.nn.dropout(h1, keep_prob=dropout_rate)
-            tf.get_variable_scope().reuse_variables()
-            _, (c2, h2) = tf.nn.dynamic_rnn(cell, x2, initial_state=LSTMStateTuple(c2, h2), sequence_length=self.seqlen2_placeholder)
-            #h2_drop = tf.nn.dropout(h2, keep_prob=dropout_rate)
+            if self.config.bidirectional:
+                _, ((_, h1_fw), (_, h1_bw)) = tf.nn.bidirectional_dynamic_rnn(cell, cell, x1, dtype=tf.float32, sequence_length=self.seqlen1_placeholder)
+                tf.get_variable_scope().reuse_variables()
+                _, ((_, h2_fw), (_, h2_bw)) = tf.nn.bidirectional_dynamic_rnn(cell, cell, x2, dtype=tf.float32, sequence_length=self.seqlen2_placeholder)
 
-        h_sub = tf.subtract(h1, h2)
-        sqdiff_12 = tf.square(h_sub)
-        sqdist_12 = tf.reduce_sum(sqdiff_12, 1)
-        h_dist = tf.reshape(sqdist_12, [batch_size,1])
-        h_mul = tf.multiply(h1, h2)
-        if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
-            h_combined = tf.concat([h1, h2, h_dist, h_mul], 1) # 3*hidden_size+1
-        else:
-            h_combined = tf.concat(1, [h1, h2, h_dist, h_mul]) # 3*hidden_size+1
+                h1 = concat([h1_fw, h1_bw], 1)  # (batch_size, 2*hidden_size)
+                h2 = concat([h2_fw, h2_bw], 1)  # (batch_size, 2*hidden_size)
+            else:
+                _, (_, h1) = tf.nn.dynamic_rnn(cell, x1, dtype=tf.float32, sequence_length=self.seqlen1_placeholder)
+                tf.get_variable_scope().reuse_variables()
+                _, (_, h2) = tf.nn.dynamic_rnn(cell, x2, dtype=tf.float32, sequence_length=self.seqlen2_placeholder)
+
+        sqdiff_12 = tf.square(h1 - h2)  # (batch_size, hidden_size)
+        h_dist = tf.reduce_sum(sqdiff_12, 1, keep_dims=True)  # (batch_size, 1)
+        h_mul = tf.multiply(h1, h2)  # (batch_size, hidden_size)
+        h_combined = concat([h1, h2, h_dist, h_mul], 1)  # (batch_size, 3*hidden_size+1)
         #h_combined_drop = tf.nn.dropout(h_combined, keep_prob=dropout_rate)
 
-        e1 = tf.matmul(h_combined, W1) + b1 # [batch_size, m]
+        e1 = tf.matmul(h_combined, W1) + b1  # (batch_size, m)
         e1_relu = tf.nn.relu(e1)
         e1_drop = tf.nn.dropout(e1_relu, keep_prob=dropout_rate)
-        preds = tf.matmul(e1_drop, W2) + b2
+        preds = tf.matmul(e1_drop, W2) + b2  # (batch_size, 2)
 
         return preds
 
