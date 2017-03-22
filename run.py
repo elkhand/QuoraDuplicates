@@ -7,7 +7,6 @@ Q2: Recurrent neural nets for NER
 from __future__ import absolute_import
 from __future__ import division
 
-import copy
 import argparse
 import logging
 import sys
@@ -92,7 +91,6 @@ def do_evaluate(args):
     config_module = imp.load_source(config_module_name, args.config)
     config = config_module.Config(args)
     print args.model_path, args.config
-    vocab_file_copy = copy.deepcopy(args.vocab)
 
     helper = ModelHelper.load(args.model_path)
     test_q1 = read_dat(args.data_test1)
@@ -114,32 +112,6 @@ def do_evaluate(args):
     embeddings = load_embeddings(args, helper)
     config.embed_size = embeddings.shape[1]
 
-    # oov
-    with open('/Users/kyu/Downloads/glvocab_1.txt') as f:
-        vocab_file_copy = f.readlines()
-    pretrained_vocab_id = set([helper.tok2id[normalize(word.strip())] for word in vocab_file_copy if normalize(word.strip()) in helper.tok2id])
-    test_dat1_oov = list()
-    test_dat2_oov = list()
-    test_lab_oov = list()
-    oov_ct = 0
-    for i in range(len(test_q1)):
-        is_oov = False
-        for word in test_dat1[i]:
-            if word not in pretrained_vocab_id:
-                is_oov = True
-                break
-        for word in test_dat2[i]:
-            if word not in pretrained_vocab_id:
-                is_oov = True
-                break
-        if is_oov:
-            oov_ct +=1
-            test_dat1_oov.append(test_dat1[i])
-            test_dat2_oov.append(test_dat2[i])
-            test_lab_oov.append(test_lab[i])
-    print oov_ct
-    test_raw_oov = zip(test_dat1_oov, test_dat2_oov, test_lab_oov)
-
     with tf.Graph().as_default():
         logger.info("Building model...",)
         start = time.time()
@@ -152,22 +124,12 @@ def do_evaluate(args):
         with tf.Session() as session:
             session.run(init)
             saver.restore(session, model.config.model_output)
-
-            #
             test_scores = model.evaluate(session, test_raw)
             labels = test_scores[-1]
             preds = test_scores[-2]
             test_scores = test_scores[:5]
             print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % test_scores
             outputConfusionMatrix(labels,preds, "confusionMatrix.png")
-
-            # oov
-            test_scores = model.evaluate(session, test_raw_oov)
-            labels = test_scores[-1]
-            preds = test_scores[-2]
-            test_scores = test_scores[:5]
-            print "acc/P/R/F1/loss: %.3f/%.3f/%.3f/%.3f/%.4f" % test_scores
-
 
 def do_shell(args):
 
