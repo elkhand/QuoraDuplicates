@@ -5,9 +5,9 @@ CS224N Final Project: Determining if two questions are duplicates of each other.
 
 1. Create a folder named "data"
 2. Download the Quora dataset from http://qim.ec.quoracdn.net/quora_duplicate_questions.tsv
-3. Use TokenizeQuestions-WordVectors.ipynb to generate the training/dev/test sets and put them inside the data folder.
+3. Use scripts/TokenizeQuestions-WordVectors.ipynb to generate the training/dev/test sets and put them inside the data folder.
 4. Download the GloVe data from http://nlp.stanford.edu/data/glove.6B.zip
-5. Use gen_data.py to generate glvocab_1.txt and glwordvectors_1_[100/300].txt and put them inside the data folder.
+5. Use scripts/gen_data.py to generate glvocab_1.txt and glwordvectors_1_[100/300].txt and put them inside the data folder.
 6. Depending on what you want to do, use one of the following commands:
    * Training
      - Training the Attention model:
@@ -71,16 +71,37 @@ CS224N Final Project: Determining if two questions are duplicates of each other.
        -cfg config/siamese_0.py \
        -mp results/lstm/XXX/
        ```
+   * Running the shell (replace ``XXX`` with the path to the folder that contains the model files)
+     - Running the shell for the Attention model:
+       ```
+       python run.py shell \
+       -v data/glvocab_1.txt \
+       -vv data/glwordvectors_1_300.txt \
+       -eb 300 \
+       -m attention \
+       -cfg config/attention_0.py \
+       -mp results/lstm/XXX/
+       ```
+     - Running the shell for the Siamese model:
+       ```
+       python run.py shell \
+       -v data/glvocab_1.txt \
+       -vv data/glwordvectors_1_300.txt \
+       -eb 300 \
+       -m siamese \
+       -cfg config/siamese_0.py \
+       -mp results/lstm/XXX/
+       ```
    * Running sendEmail.py script:
      ```
-     python sendEmail.py elkhan.dadashov@gmail.com /home/elkhand/QuoraDuplicates/exp_march9_relu_pred.txt "exp1 beta=xx"
+     python scripts/sendEmail.py elkhan.dadashov@gmail.com /home/elkhand/QuoraDuplicates/exp_march9_relu_pred.txt "exp1 beta=xx"
      
-     python sendEmail.py <your_email> <path_to_file_to_be_attached_to_email> <some_string_to_be_attached_to_subject>
+     python scripts/sendEmail.py <your_email> <path_to_file_to_be_attached_to_email> <some_string_to_be_attached_to_subject>
      ```
 
    * Getting best result from log file:
      ```
-     python getBestF1ScoreFromLogs.py results/lstm/20170316_194444/log
+     python scripts/getBestF1ScoreFromLogs.py results/lstm/XXX/log
      ```
 
 ## You can download data from this link:
