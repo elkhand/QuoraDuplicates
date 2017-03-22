@@ -16,7 +16,7 @@ class Config:
     embeddings_trainable = True
     pos_weight = 1.7
     beta = 0.1
-    
+    bidirectional = False
 
     def __init__(self, args):
         self.cell = "lstm"
