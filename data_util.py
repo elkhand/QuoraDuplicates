@@ -38,13 +38,24 @@ class ModelHelper(object):
         self.END = [tok2id[END_TOKEN]]
         self.max_length = max_length
 
-    def vectorize_example(self, sentence, labels=None):
+    def vectorize_example(self, sentence, is_train, labels=None):
         unknown_id = self.tok2id[UNK]
-        sentence_ = [self.tok2id.get(normalize(word), unknown_id) for word in sentence]
+        if is_train:
+            unk_prob = 0.01
+            np.random.seed(0)
+            sentence_ = list()
+            unk_samp = np.random.random(len(sentence))
+            for i,word in enumerate(sentence):
+                if unk_samp[i] < unk_prob:
+                    sentence_.append(unknown_id)
+                else:
+                    sentence_.append(self.tok2id.get(normalize(word), unknown_id))
+        else:
+            sentence_ = [self.tok2id.get(normalize(word), unknown_id) for word in sentence]
         return sentence_
 
-    def vectorize(self, data):
-        return [self.vectorize_example(sentence) for sentence in data]
+    def vectorize(self, data, is_train=False):
+        return [self.vectorize_example(sentence, is_train=is_train) for sentence in data]
 
     @classmethod
     def build(cls, data):
@@ -76,7 +87,7 @@ class ModelHelper(object):
             tok2id, max_length = pickle.load(f)
         return cls(tok2id, max_length)
 
-def load_and_preprocess_data(args, add_end_token=False):
+def load_and_preprocess_data(args, add_end_token=False, is_train=False):
     logger.info("Loading training data...")
     train_q1 = read_dat(args.data_train1)
     train_q2 = read_dat(args.data_train2)
@@ -110,8 +121,8 @@ def load_and_preprocess_data(args, add_end_token=False):
 
 
     # now process all the input data.
-    train_dat1 = helper.vectorize(train_q1)
-    train_dat2 = helper.vectorize(train_q2)
+    train_dat1 = helper.vectorize(train_q1, is_train=is_train)
+    train_dat2 = helper.vectorize(train_q2, is_train=is_train)
     dev_dat1   = helper.vectorize(dev_q1)
     dev_dat2   = helper.vectorize(dev_q2)
 
