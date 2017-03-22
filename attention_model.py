@@ -146,15 +146,29 @@ class AttentionModel(Model):
             #         tf.get_variable_scope().reuse_variables()
             last_h = h
 
+        # setup Y if adding embeddings
+        if self.config.score_type == 3:
+            if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
+                Y = tf.concat([Y, x1], 2) # (?, L, hidden_size+embed_size)
+            else:
+                Y = tf.concat(2, [Y, x1]) # (?, L, hidden_size+embed_size)
+
         if self.config.uses_attention:
             xavier_init = tf.contrib.layers.xavier_initializer()
             W_y = tf.get_variable("W_y", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
-            W_h = tf.get_variable("W_h", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
-            W_r = tf.get_variable("W_r", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
-            w = tf.get_variable("w", shape=[self.config.hidden_size], initializer=xavier_init)
-            W_t = tf.get_variable("W_t", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
-            W_p = tf.get_variable("W_p", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
-            W_x = tf.get_variable("W_x", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+            if self.config.score_type == 3:
+                W_h = tf.get_variable("W_h", shape=[self.config.hidden_size + self.config.embed_size, self.config.hidden_size + self.config.embed_size], initializer=xavier_init)
+                W_r = tf.get_variable("W_r", shape=[self.config.hidden_size + self.config.embed_size, self.config.hidden_size + self.config.embed_size], initializer=xavier_init)
+                W_t = tf.get_variable("W_t", shape=[self.config.hidden_size + self.config.embed_size, self.config.hidden_size + self.config.embed_size], initializer=xavier_init)
+                W_p = tf.get_variable("W_p", shape=[self.config.hidden_size + self.config.embed_size, self.config.hidden_size], initializer=xavier_init)
+                W_x = tf.get_variable("W_x", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+            else:
+                W_h = tf.get_variable("W_h", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+                W_r = tf.get_variable("W_r", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+                w = tf.get_variable("w", shape=[self.config.hidden_size], initializer=xavier_init)
+                W_t = tf.get_variable("W_t", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+                W_p = tf.get_variable("W_p", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
+                W_x = tf.get_variable("W_x", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
 
             # Y = tf.transpose(tf.stack(h_step1), [1, 0, 2])  # (?, L, hidden_size)
 
@@ -166,19 +180,45 @@ class AttentionModel(Model):
             W_y_Y = tf.reshape(tmp2, [-1, self.max_length, hidden_size])  # (?, L, hidden_size)
 
             # Initialize r_0 to zeros.
-            r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
+            if self.config.score_type == 3:
+                r_t = tf.zeros([batch_size, self.config.hidden_size+self.config.embed_size], dtype=tf.float32)
+            else:
+                r_t = tf.zeros([batch_size, self.config.hidden_size], dtype=tf.float32)
             r_step = []
             alpha_step = []
 
             for time_step in range(self.max_length):
+
+                x_t = x2[:, time_step, :]
                 h_t = Y2[:, time_step, :]
 
-                if self.config.score_type2:
-                    # M_t = Y .* ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
+                if self.config.score_type == 3:
+                    # M_t = Y .* ((W_h * [h_t, x_t]) + (W_r * r_{t-1})) X e_L)
+                    if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
+                        input = tf.concat([h_t, x_t], 1) # hidden_size + embed_size
+                    else:
+                        input = tf.concat(1, [h_t, x_t]) # hidden_size + embed_size
+                    tmp = tf.matmul(input, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size+embed_size)
+                    tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size+embed_size)
+                    M_t = Y * tmp2  # (?, L, hidden_size)
+                    alpha_t = tf.nn.softmax(tf.reduce_sum(M_t, 2) + mask1)
+
+                    # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
+                    tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size+self.config.embed_size))  # (?, L, hidden_size+embed_size)
+                    Y_alpha_t = tf.reduce_sum(Y * tmp3, 1)  # (?, hidden_size+embed_size)
+                    r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size+embed_size)
+
+                elif self.config.score_type == 2 or self.config.score_type2:
+                    # M_t = Y ^T ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
                     tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
                     tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
                     M_t = Y * tmp2  # (?, L, hidden_size)
                     alpha_t = tf.nn.softmax(tf.reduce_sum(M_t, 2) + mask1)
+
+                    # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
+                    tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
+                    Y_alpha_t = tf.reduce_sum(Y * tmp3, 1)  # (?, hidden_size)
+                    r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size)
 
                 else:
                     # M_t = tanh((W_y * Y) + ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
@@ -189,14 +229,13 @@ class AttentionModel(Model):
                     # alpha_t = softmax(w^T * M_t)
                     alpha_t = tf.nn.softmax(tf.reduce_sum(M_t * w, 2) + mask1)  # (?, L)
 
-                alpha_step.append(alpha_t)
-
-                # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
-                tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
-                Y_alpha_t = tf.reduce_sum(Y * tmp3, 1)  # (?, hidden_size)
-                r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size)
+                    # r_t = (Y * alpha_t^T) + tanh(W_t * r_{t-1})
+                    tmp3 = tf.tile(tf.expand_dims(alpha_t, 2), (1, 1, hidden_size))  # (?, L, hidden_size)
+                    Y_alpha_t = tf.reduce_sum(Y * tmp3, 1)  # (?, hidden_size)
+                    r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size)
 
                 r_step.append(r_t)
+                alpha_step.append(alpha_t)
 
             # h* = tanh((W_p * r_L) + (W_x * h_N))
             r = tf.transpose(tf.stack(r_step), [1, 2, 0])  # (?, hidden_size, L)
