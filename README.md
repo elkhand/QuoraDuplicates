@@ -1,5 +1,5 @@
 # QuoraDuplicates
-CS224N Final Project: Determining if two questions are duplicates of each other.
+CS224N Final Project: Determining whether two questions are duplicates of each other.
 
 ## How to run the models
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
 """
-Q2: Recurrent neural nets for NER
+Final project: Determining whether two questions are duplicates of each other.
 """
 
 from __future__ import absolute_import
@@ -9,13 +9,12 @@ from __future__ import division
 
 import argparse
 import logging
+import os
 import sys
 import time
 
 import tensorflow as tf
 import numpy as np
-
-import os
 
 from util import write_conll, read_dat, read_lab
 from attention_model import AttentionModel
