@@ -8,27 +8,9 @@ from model import Model
 
 class BOWModel(Model):
     """
-    Implements a recursive neural network with an embedding layer and
-    single hidden layer.
+    Implements a bag-of-words model.
     """
     def add_placeholders(self):
-        """Generates placeholder variables to represent the input tensors
-
-        These placeholders are used as inputs by the rest of the model building and will be fed
-        data during training.  Note that when "None" is in a placeholder's shape, it's flexible
-        (so we can use different batch sizes without rebuilding the model).
-
-        Adds following nodes to the computational graph
-
-        input_placeholder: Input placeholder tensor of  shape (None, self.max_length, n_features), type tf.int32
-        mask_placeholder:  Mask placeholder tensor of shape (None, self.max_length), type tf.bool
-        dropout_placeholder: Dropout value placeholder (scalar), type tf.float32
-
-            self.input_placeholder
-            self.mask_placeholder
-            self.dropout_placeholder
-
-        """
         self.input1_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.input2_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.labels_placeholder = tf.placeholder(tf.float32, shape=(None,))
@@ -60,38 +42,6 @@ class BOWModel(Model):
         return feed_dict
 
     def add_prediction_op(self):
-        """Adds the unrolled RNN:
-            h_0 = 0
-            for t in 1 to T:
-                o_t, h_t = cell(x_t, h_{t-1})
-                o_drop_t = Dropout(o_t, dropout_rate)
-                y_t = o_drop_t U + b_2
-
-            - Define the variables U, b_2.
-            - Define the vector h as a constant and inititalize it with
-              zeros. See tf.zeros and tf.shape for information on how
-              to initialize this variable to be of the right shape.
-              https://www.tensorflow.org/api_docs/python/constant_op/constant_value_tensors#zeros
-              https://www.tensorflow.org/api_docs/python/array_ops/shapes_and_shaping#shape
-            - In a for loop, begin to unroll the RNN sequence. Collect
-              the predictions in a list.
-            - When unrolling the loop, from the second iteration
-              onwards, you will HAVE to call
-              tf.get_variable_scope().reuse_variables() so that you do
-              not create new variables in the RNN cell.
-              See https://www.tensorflow.org/versions/master/how_tos/variable_scope/
-            - Concatenate and reshape the predictions into a predictions
-              tensor.
-
-        Remember:
-            * Use the xavier initilization for matrices.
-            * Note that tf.nn.dropout takes the keep probability (1 - p_drop) as an argument.
-            The keep probability should be set to the value of self.dropout_placeholder
-
-        Returns:
-            pred: tf.Tensor of shape (batch_size, max_length, n_classes)
-        """
-
         # embedding with mask
         x1 = self.add_embedding(1) * tf.expand_dims(self.featmask1_placeholder, 2) # (?, L, embed_size) .* (?, L)
         x2 = self.add_embedding(2) * tf.expand_dims(self.featmask2_placeholder, 2)
@@ -162,17 +112,6 @@ class BOWModel(Model):
     def add_training_op(self, loss):
         """Sets up the training Ops.
 
-        Creates an optimizer and applies the gradients to all trainable variables.
-        The Op returned by this function is what must be passed to the
-        `sess.run()` call to cause the model to train. See
-
-        https://www.tensorflow.org/versions/r0.7/api_docs/python/train.html#Optimizer
-
-        for more information.
-
-        Use tf.train.AdamOptimizer for this model.
-        Calling optimizer.minimize() will return a train_op object.
-
         Args:
             loss: Loss tensor, from cross_entropy_loss.
         Returns:
@@ -190,41 +129,6 @@ class BOWModel(Model):
         return pad_sequences(examples, self.max_length)
 
 def pad_sequences(data, max_length, n_features=1):
-
-    """Ensures each input-output seqeunce pair in @data is of length
-    @max_length by padding it with zeros and truncating the rest of the
-    sequence.
-
-    In the code below, for every sentence, labels pair in @data,
-    (a) create a new sentence which appends zero feature vectors until
-    the sentence is of length @max_length. If the sentence is longer
-    than @max_length, simply truncate the sentence to be @max_length
-    long.
-    (b) create a new label sequence similarly.
-    (c) create a _masking_ sequence that has a True wherever there was a
-    token in the original sequence, and a False for every padded input.
-
-    Example: for the (sentence, labels) pair: [[4,1], [6,0], [7,0]], [1,
-    0, 0], and max_length = 5, we would construct
-        - a new sentence: [[4,1], [6,0], [7,0], [0,0], [0,0]]
-        - a new label seqeunce: [1, 0, 0, 4, 4], and
-        - a masking seqeunce: [True, True, True, False, False].
-
-    Args:
-        data: is a list of (sentence, labels) tuples. @sentence is a list
-            containing the words in the sentence and @label is a list of
-            output labels. Each word is itself a list of
-            @n_features features. For example, the sentence "Chris
-            Manning is amazing" and labels "PER PER O O" would become
-            ([[1,9], [2,9], [3,8], [4,8]], [1, 1, 4, 4]). Here "Chris"
-            the word has been featurized as "[1, 9]", and "[1, 1, 4, 4]"
-            is the list of labels.
-        max_length: the desired length for all input/output sequences.
-    Returns:
-        a new list of data points of the structure (sent1, sent2, len1, len2, labels).
-        Each of sentence', labels' and mask are of length @max_length.
-        See the example above for more details.
-    """
     ret = []
 
     # Use this zero vector when padding sequences.
