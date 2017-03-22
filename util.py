@@ -11,7 +11,7 @@ from __future__ import division
 import sys
 import time
 import StringIO
-from collections import defaultdict, Counter, OrderedDict
+from collections import defaultdict, Counter
 import numpy as np
 from numpy import array
 
@@ -103,20 +103,6 @@ Blackburn	PER
     write_conll(output_, input)
     output_ = output_.getvalue()
     assert output == output_
-
-def load_word_vector_mapping(vocab_fstream, vector_fstream):
-    """
-    Load word vector mapping using @vocab_fstream, @vector_fstream.
-    Assumes each line of the vocab file matches with those of the vector
-    file.
-    """
-    ret = OrderedDict()
-    for vocab, vector in zip(vocab_fstream, vector_fstream):
-        vocab = vocab.strip()
-        vector = vector.strip()
-        ret[vocab] = array(list(map(float, vector.split())))
-
-    return ret
 
 def to_table(data, row_labels, column_labels, precision=2, digits=4):
     """Pretty print tables.

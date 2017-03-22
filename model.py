@@ -5,7 +5,7 @@ import numpy as np
 
 from util import Progbar, minibatches
 
-logger = logging.getLogger("hw3.q2")
+logger = logging.getLogger("fp")
 logger.setLevel(logging.DEBUG)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 

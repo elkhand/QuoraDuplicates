@@ -8,27 +8,9 @@ from model import Model
 
 class AttentionModel(Model):
     """
-    Implements a recursive neural network with an embedding layer and
-    single hidden layer.
+    Implements a sequence-to-sequence network with word-by-word attention.
     """
     def add_placeholders(self):
-        """Generates placeholder variables to represent the input tensors
-
-        These placeholders are used as inputs by the rest of the model building and will be fed
-        data during training.  Note that when "None" is in a placeholder's shape, it's flexible
-        (so we can use different batch sizes without rebuilding the model).
-
-        Adds following nodes to the computational graph
-
-        input_placeholder: Input placeholder tensor of  shape (None, self.max_length, n_features), type tf.int32
-        mask_placeholder:  Mask placeholder tensor of shape (None, self.max_length), type tf.bool
-        dropout_placeholder: Dropout value placeholder (scalar), type tf.float32
-
-            self.input_placeholder
-            self.mask_placeholder
-            self.dropout_placeholder
-
-        """
         self.input1_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.input2_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
         self.seqlen1_placeholder = tf.placeholder(tf.int32, (None,))
@@ -64,59 +46,26 @@ class AttentionModel(Model):
             feed_dict.update({self.labels_placeholder: np.array(labels_batch, dtype=np.float32)})
         return feed_dict
 
-    def add_asymmetric_prediction_op(self, x1, x2, seqlen1, seqlen2, mask1):
-        """Adds the unrolled RNN:
-            h_0 = 0
-            for t in 1 to T:
-                o_t, h_t = cell(x_t, h_{t-1})
-                o_drop_t = Dropout(o_t, dropout_rate)
-                y_t = o_drop_t U + b_2
-
-            - Define the variables U, b_2.
-            - Define the vector h as a constant and inititalize it with
-              zeros. See tf.zeros and tf.shape for information on how
-              to initialize this variable to be of the right shape.
-              https://www.tensorflow.org/api_docs/python/constant_op/constant_value_tensors#zeros
-              https://www.tensorflow.org/api_docs/python/array_ops/shapes_and_shaping#shape
-            - In a for loop, begin to unroll the RNN sequence. Collect
-              the predictions in a list.
-            - When unrolling the loop, from the second iteration
-              onwards, you will HAVE to call
-              tf.get_variable_scope().reuse_variables() so that you do
-              not create new variables in the RNN cell.
-              See https://www.tensorflow.org/versions/master/how_tos/variable_scope/
-            - Concatenate and reshape the predictions into a predictions
-              tensor.
-
-        Remember:
-            * Use the xavier initilization for matrices.
-            * Note that tf.nn.dropout takes the keep probability (1 - p_drop) as an argument.
-            The keep probability should be set to the value of self.dropout_placeholder
-
-        Returns:
-            pred: tf.Tensor of shape (batch_size, max_length, n_classes)
-        """
-
+    def _add_asymmetric_prediction_op(self, x1, x2, seqlen1, seqlen2, mask1):
         batch_size = tf.shape(x1)[0]
         hidden_size = self.config.hidden_size
         # h_step1, h_step2 = list(), list()
 
+        # TensorFlow 1.0 compatibility
         BasicLSTMCell = tf.contrib.rnn.BasicLSTMCell if hasattr(tf.contrib.rnn, 'BasicLSTMCell') else tf.nn.rnn_cell.BasicLSTMCell
         LSTMStateTuple = tf.contrib.rnn.LSTMStateTuple if hasattr(tf.contrib.rnn, 'LSTMStateTuple') else tf.nn.rnn_cell.LSTMStateTuple
         DropoutWrapper = tf.contrib.rnn.DropoutWrapper if hasattr(tf.contrib.rnn, 'DropoutWrapper') else tf.nn.rnn_cell.DropoutWrapper
+        def concat(values, axis):
+            if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
+                return tf.concat(values, axis)
+            return tf.concat(axis, values)
 
-        # Use the cell defined below. For Q2, we will just be using the
-        # RNNCell you defined, but for Q3, we will run this code again
-        # with a GRU cell!
         if self.config.cell == "lstm":
             cell1 = BasicLSTMCell(self.config.hidden_size)
             cell2 = BasicLSTMCell(self.config.hidden_size)
 
             cell1 = DropoutWrapper(cell1, self.dropout_placeholder)
             cell2 = DropoutWrapper(cell2, self.dropout_placeholder)
-        elif self.config.cell == "gru":
-            cell1 = GRUCell(self.config.n_features * self.config.embed_size, self.config.hidden_size)
-            cell2 = GRUCell(self.config.n_features * self.config.embed_size, self.config.hidden_size)
         else:
             raise ValueError("Unsuppported cell type: " + self.config.cell)
 
@@ -148,10 +97,7 @@ class AttentionModel(Model):
 
         # setup Y if adding embeddings
         if self.config.score_type == 3:
-            if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
-                Y = tf.concat([Y, x1], 2) # (?, L, hidden_size+embed_size)
-            else:
-                Y = tf.concat(2, [Y, x1]) # (?, L, hidden_size+embed_size)
+            Y = concat([Y, x1], 2)  # (?, L, hidden_size+embed_size)
 
         if self.config.uses_attention:
             xavier_init = tf.contrib.layers.xavier_initializer()
@@ -170,8 +116,6 @@ class AttentionModel(Model):
                 W_p = tf.get_variable("W_p", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
                 W_x = tf.get_variable("W_x", shape=[self.config.hidden_size, self.config.hidden_size], initializer=xavier_init)
 
-            # Y = tf.transpose(tf.stack(h_step1), [1, 0, 2])  # (?, L, hidden_size)
-
             # Precompute W_y * Y, because it's used many times in the loop.
             # Y's shape is (?, L, hidden_size)
             # W_y's shape is (hidden_size, hidden_size)
@@ -188,16 +132,12 @@ class AttentionModel(Model):
             alpha_step = []
 
             for time_step in range(self.max_length):
-
-                x_t = x2[:, time_step, :]
                 h_t = Y2[:, time_step, :]
 
                 if self.config.score_type == 3:
                     # M_t = Y .* ((W_h * [h_t, x_t]) + (W_r * r_{t-1})) X e_L)
-                    if int(tf.__version__.split('.')[0]) >= 1: # TensorFlow 1.0 or greater
-                        input = tf.concat([h_t, x_t], 1) # hidden_size + embed_size
-                    else:
-                        input = tf.concat(1, [h_t, x_t]) # hidden_size + embed_size
+                    x_t = x2[:, time_step, :]
+                    input = concat([h_t, x_t], 1)  # (?, hidden_size+embed_size)
                     tmp = tf.matmul(input, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size+embed_size)
                     tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size+embed_size)
                     M_t = Y * tmp2  # (?, L, hidden_size)
@@ -208,7 +148,7 @@ class AttentionModel(Model):
                     Y_alpha_t = tf.reduce_sum(Y * tmp3, 1)  # (?, hidden_size+embed_size)
                     r_t = Y_alpha_t + tf.tanh(tf.matmul(r_t, W_t))  # (?, hidden_size+embed_size)
 
-                elif self.config.score_type == 2 or self.config.score_type2:
+                elif self.config.score_type == 2:
                     # M_t = Y ^T ((W_h * h_t) + (W_r * r_{t-1})) X e_L)
                     tmp = tf.matmul(h_t, W_h) + tf.matmul(r_t, W_r)  # (?, hidden_size)
                     tmp2 = tf.tile(tf.expand_dims(tmp, 1), (1, self.max_length, 1))  # (?, L, hidden_size)
@@ -243,6 +183,8 @@ class AttentionModel(Model):
             r_L = tf.squeeze(tf.matmul(r, tf.expand_dims(tmp4, 2)), 2)  # (?, hidden_size)
             last_h = tf.tanh(tf.matmul(r_L, W_p) + tf.matmul(last_h, W_x))  # (?, hidden_size)
 
+            # Create a node for alpha so that it can be inspected by the shell to create
+            # the attention visualization.
             alpha = tf.transpose(tf.stack(alpha_step), [1, 0, 2], "alpha")  # (?, L, L)
 
         return last_h
@@ -257,9 +199,9 @@ class AttentionModel(Model):
             U = tf.get_variable("U", shape=(self.config.hidden_size, 2), dtype=tf.float32, initializer=xavier_init)
             b = tf.Variable(initial_value=np.zeros((1, 2)), dtype=tf.float32, name="b")
 
-            last_h_a = self.add_asymmetric_prediction_op(x1, x2, self.seqlen1_placeholder, self.seqlen2_placeholder, self.mask1_placeholder)
+            last_h_a = self._add_asymmetric_prediction_op(x1, x2, self.seqlen1_placeholder, self.seqlen2_placeholder, self.mask1_placeholder)
             tf.get_variable_scope().reuse_variables()
-            last_h_b = self.add_asymmetric_prediction_op(x2, x1, self.seqlen2_placeholder, self.seqlen1_placeholder, self.mask2_placeholder)
+            last_h_b = self._add_asymmetric_prediction_op(x2, x1, self.seqlen2_placeholder, self.seqlen1_placeholder, self.mask2_placeholder)
 
             last_h = last_h_a + last_h_b
 
@@ -292,14 +234,6 @@ class AttentionModel(Model):
 
     def add_training_op(self, loss):
         """Sets up the training Ops.
-
-        Creates an optimizer and applies the gradients to all trainable variables.
-        The Op returned by this function is what must be passed to the
-        `sess.run()` call to cause the model to train. See
-
-        https://www.tensorflow.org/versions/r0.7/api_docs/python/train.html#Optimizer
-
-        for more information.
 
         Args:
             loss: Loss tensor, from cross_entropy_loss.

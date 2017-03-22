@@ -160,7 +160,6 @@ def do_shell(args):
             saver.restore(session, model.config.model_output)
 
             print("""Welcome!
-You can use this shell to explore the behavior of your model.
 Please enter sentences with spaces between tokens, e.g.,
 input1> Do you like cats ?
 input2> Are cats better than people ?

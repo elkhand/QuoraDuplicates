@@ -9,8 +9,7 @@ from model import Model
 
 class SiameseModel(Model):
     """
-    Implements a recursive neural network with an embedding layer and
-    single hidden layer.
+    Implements a Siamese LSTM network.
     """
     def add_placeholders(self):
         self.input1_placeholder = tf.placeholder(tf.int32, (None, self.max_length))
