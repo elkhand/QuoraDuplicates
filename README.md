@@ -30,19 +30,19 @@ CS224N Final Project: Determining whether two questions are duplicates of each o
      - Training the Siamese model:
        ```
        python run.py train \
--m siamese \
--dt1 /home/elkhand/datasets/Quora/derived/data/dat_train_a.conll \
--dt2 /home/elkhand/datasets/Quora/derived/data/dat_train_b.conll \
--dtl /home/elkhand/datasets/Quora/derived/data/labels_train.conll \
--dd1 /home/elkhand/datasets/Quora/derived/data/dat_dev_a.conll \
--dd2 /home/elkhand/datasets/Quora/derived/data/dat_dev_b.conll \
--ddl /home/elkhand/datasets/Quora/derived/data/labels_dev.conll \
--de1 /home/elkhand/datasets/Quora/derived/data/dat_test_a.conll \
--de2 /home/elkhand/datasets/Quora/derived/data/dat_test_b.conll \
--v /home/elkhand/datasets/glove-vectors/glwordvectors_common.txt \
--vv /home/elkhand/datasets/glove-vectors/glwordvectors_300.txt \
--eb 300 \
--cfg config/siamese_0.py
+       -m siamese \
+       -dt1 /home/elkhand/datasets/Quora/derived/data/dat_train_a.conll \
+       -dt2 /home/elkhand/datasets/Quora/derived/data/dat_train_b.conll \
+       -dtl /home/elkhand/datasets/Quora/derived/data/labels_train.conll \
+       -dd1 /home/elkhand/datasets/Quora/derived/data/dat_dev_a.conll \
+       -dd2 /home/elkhand/datasets/Quora/derived/data/dat_dev_b.conll \
+       -ddl /home/elkhand/datasets/Quora/derived/data/labels_dev.conll \
+       -de1 /home/elkhand/datasets/Quora/derived/data/dat_test_a.conll \
+       -de2 /home/elkhand/datasets/Quora/derived/data/dat_test_b.conll \
+       -v /home/elkhand/datasets/glove-vectors/glwordvectors_common.txt \
+       -vv /home/elkhand/datasets/glove-vectors/glwordvectors_300.txt \
+       -eb 300 \
+       -cfg config/siamese_0.py
        ```
    * Evaluating (replace ``XXX`` with the path to the folder that contains the model files)
      - Evaluating the Attention model:
