@@ -10,7 +10,7 @@ class Config:
     hidden_size = 1100
     second_hidden_size = 800
     batch_size = 100
-    n_epochs = 1000
+    n_epochs = 100
     lr = 0.0006#0.0003 F1: 76 Acc: 83
     lr_decay_rate = 0.1
     embeddings_trainable = True

@@ -63,11 +63,10 @@ class ModelHelper(object):
         # Reserve 0 for the special NIL token.
         tok2id = build_dict((normalize(word) for sent1, sent2, _ in data for word in sent1 + sent2), offset=1, max_words=1000000)
         tok2id.update(build_dict([START_TOKEN, END_TOKEN, UNK], offset=len(tok2id)))
+
         assert sorted(tok2id.items(), key=lambda t: t[1])[0][1] == 1
         logger.info("Built dictionary for %d features.", len(tok2id))
-
         max_length = max(max(len(sent1), len(sent2)) for sent1, sent2, _ in data)
-
         return cls(tok2id, max_length)
 
     def save(self, path):

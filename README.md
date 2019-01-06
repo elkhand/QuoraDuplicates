@@ -39,8 +39,8 @@ CS224N Final Project: Determining whether two questions are duplicates of each o
        -ddl data/labels_dev.conll \
        -de1 data/dat_test_a.conll \
        -de2 data/dat_test_b.conll \
-       -v data/glvocab_1.txt \
-       -vv data/glwordvectors_1_300.txt \
+       -v /home/elkhand/datasets/glove-vectors/glwordvectors_common.txt \
+       -vv /home/elkhand/datasets/glove-vectors/glwordvectors_300.txt \
        -eb 300 \
        -cfg config/siamese_0.py
        ```
