@@ -31,14 +31,14 @@ CS224N Final Project: Determining whether two questions are duplicates of each o
        ```
        python run.py train \
        -m siamese \
-       -dt1 /home/elkhand/datasets/Quora/derived/data/dat_train_a.conll \
-       -dt2 /home/elkhand/datasets/Quora/derived/data/dat_train_b.conll \
-       -dtl /home/elkhand/datasets/Quora/derived/data/labels_train.conll \
-       -dd1 /home/elkhand/datasets/Quora/derived/data/dat_dev_a.conll \
-       -dd2 /home/elkhand/datasets/Quora/derived/data/dat_dev_b.conll \
-       -ddl /home/elkhand/datasets/Quora/derived/data/labels_dev.conll \
-       -de1 /home/elkhand/datasets/Quora/derived/data/dat_test_a.conll \
-       -de2 /home/elkhand/datasets/Quora/derived/data/dat_test_b.conll \
+       -dt1 data/dat_train_a.conll \
+       -dt2 data/dat_train_b.conll \
+       -dtl data/labels_train.conll \
+       -dd1 data/dat_dev_a.conll \
+       -dd2 data/dat_dev_b.conll \
+       -ddl data/labels_dev.conll \
+       -de1 data/dat_test_a.conll \
+       -de2 data/dat_test_b.conll \
        -v /home/elkhand/datasets/glove-vectors/glwordvectors_common.txt \
        -vv /home/elkhand/datasets/glove-vectors/glwordvectors_300.txt \
        -eb 300 \
